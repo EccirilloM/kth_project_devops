@@ -4,7 +4,7 @@ export const TOPICS = {
   mechatronics: 'sail_gui/data/mechatronics_data',
   indicators: 'sail_gui/data/indicators',
   recording: 'sail_gui/data/recording_state',
-  diagnostic: 'sail_gui/data/diagnostic',
+  diagnostic: 'sail_gui/data/diagnostics',
   setMark: 'sail_gui/cmd/set_mark',
   update: 'sail_gui/cmd/update',
   testServo: 'sail_gui/cmd/show_servo_angle',

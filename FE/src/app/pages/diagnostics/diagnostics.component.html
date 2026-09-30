@@ -16,19 +16,28 @@
   <article class="diagnostic-card raspberry-card">
     <div class="card-heading">
       <h3><span class="material-icons" aria-hidden="true">memory</span> Raspberry</h3>
-      <span class="status" [attr.data-status]="raspberry()?.status ?? 'unknown'">{{ statusLabel(raspberry()?.status) }}</span>
+      @if (raspberry(); as pi) {
+        <span class="status">{{ pi.device_id }}</span>
+      }
     </div>
     <dl class="metrics raspberry-metrics">
       <div><dt>Temperatura</dt><dd>{{ format(raspberry()?.temperature_c, '°C') }}</dd></div>
       <div><dt>Utilizzo CPU</dt><dd>{{ format(raspberry()?.cpu_usage_percent, '%') }}</dd></div>
-      <div><dt>Memoria utilizzata</dt><dd>{{ format(raspberry()?.memory_usage_percent, '%') }}</dd></div>
+      <div>
+        <dt>Memoria utilizzata</dt>
+        <dd>{{ format(raspberry()?.memory_usage_percent, '%') }}</dd>
+        @if (raspberry()?.memory_total_bytes != null) {
+          <dd class="memory-detail">{{ memoryBytes(raspberry()?.memory_used_bytes) }} / {{ memoryBytes(raspberry()?.memory_total_bytes) }}</dd>
+        }
+      </div>
       <div><dt>Tempo di attività</dt><dd>{{ uptime(raspberry()?.uptime_s) }}</dd></div>
     </dl>
   </article>
 
   <h3 class="section-title">Batterie</h3>
+  <p class="empty-state">Dati delle batterie non disponibili: il messaggio diagnostico attuale contiene solo le misure del Raspberry.</p>
   <div class="battery-grid">
-    @for (battery of batteries(); track battery.id) {
+    @for (battery of batteries; track battery.id) {
       <article class="diagnostic-card">
         <div class="card-heading">
           <h4><span class="material-icons" aria-hidden="true">battery_std</span> {{ battery.name }}</h4>
@@ -48,8 +57,6 @@
           <div><dt>Temperatura</dt><dd>{{ format(battery.temperature_c, '°C') }}</dd></div>
         </dl>
       </article>
-    } @empty {
-      <p class="empty-state">Nessuna batteria presente nell’ultimo messaggio ricevuto.</p>
     }
   </div>
 </section>

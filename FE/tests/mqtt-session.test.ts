@@ -10,6 +10,7 @@ import { ClientCommandFactory as commands } from '../src/app/dtos/commands/Clien
 import { IndicatorType } from '../src/app/dtos/indicator/IndicatorType';
 import { MethodType } from '../src/app/dtos/indicator/MethodType';
 import { MqttConnectionState } from '../src/app/dtos/mqtt/Mqtt.connection.model';
+import { diagnosticSample } from './diagnostic-sample';
 
 class FakeClient extends EventEmitter {
   connected = false;
@@ -233,15 +234,17 @@ test('indicator commands obey fresh boat capability flags and use unqueued QoS 0
   assert.equal(client.published.length, 1);
 });
 
-const diagnosticSample = {schema_version: 1, stamp: {sec: 100, nanosec: 0},
-  raspberry: {temperature_c: 48}, batteries: [{id: 'main', level_percent: 0}, {id: 'aux', level_percent: 85}]};
-
 test('only Staff subscribes to and receives diagnostics; switching to Guest clears them', async t => {
   const {session, login} = setup(t);
+  const diagnostic = () => session.diagnostic$.value;
   const staff = await login('Staff');
-  assert.ok(staff.subscriptions.includes(TOPICS.diagnostic));
-  staff.message(TOPICS.diagnostic, diagnosticSample);
-  assert.equal(session.diagnostic$.value?.batteries[0].level_percent, 0);
+  assert.ok(staff.subscriptions.includes('sail_gui/data/diagnostics'));
+  assert.equal(staff.subscriptions.includes('sail_gui/data/diagnostic'), false);
+  staff.message('sail_gui/data/diagnostic', diagnosticSample);
+  assert.equal(diagnostic(), null);
+  staff.message('sail_gui/data/diagnostics', diagnosticSample);
+  assert.equal(diagnostic()?.raspberry.cpu_usage_percent, 0);
+  assert.equal(diagnostic()?.raspberry.memory_usage_percent, 25);
   session.logout();
   assert.equal(session.diagnostic$.value, null);
   const guest = await login('Guest');
@@ -260,7 +263,7 @@ test('diagnostics ignore retained/malformed messages, expire independently, and 
   client.message(TOPICS.diagnostic, diagnosticSample);
   t.mock.timers.tick(APP_CONFIG.dataTimeoutMs + 500);
   assert.equal(diagnostic()?.raspberry?.temperature_c, 48);
-  client.message(TOPICS.diagnostic, {...diagnosticSample, raspberry: {temperature_c: 'bad'}});
+  client.message(TOPICS.diagnostic, {...diagnosticSample, temperature: 'bad'});
   t.mock.timers.tick(APP_CONFIG.diagnosticTimeoutMs - APP_CONFIG.dataTimeoutMs);
   assert.equal(diagnostic(), null);
   client.message(TOPICS.diagnostic, diagnosticSample);

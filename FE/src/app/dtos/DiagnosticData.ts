@@ -1,14 +1,16 @@
 import type { TimeStamp } from './common/TimeStamp';
 
-/** Provisional MQTT/ROS contract v1. Units are explicit; null means unavailable. */
+/** View models. Units are explicit; null means unavailable. */
 export type DiagnosticStatus = 'ok' | 'warning' | 'error' | 'unknown';
 
 export interface RaspberryDiagnostic {
+  device_id: string;
   temperature_c: number | null;
   cpu_usage_percent: number | null;
   memory_usage_percent: number | null;
+  memory_used_bytes: number | null;
+  memory_total_bytes: number | null;
   uptime_s: number | null;
-  status: DiagnosticStatus;
 }
 
 export interface BatteryDiagnostic {
@@ -22,8 +24,6 @@ export interface BatteryDiagnostic {
 }
 
 export interface DiagnosticData {
-  schema_version: 1;
   stamp: TimeStamp;
-  raspberry: RaspberryDiagnostic | null;
-  batteries: BatteryDiagnostic[];
+  raspberry: RaspberryDiagnostic;
 }

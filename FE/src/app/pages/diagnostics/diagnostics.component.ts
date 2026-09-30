@@ -19,7 +19,7 @@ const waitingBatteries: BatteryDiagnostic[] = [1, 2].map(index => ({
 export class DiagnosticsComponent {
   readonly data = toSignal(inject(TelemetryService).diagnosticData$, {initialValue: null});
   readonly raspberry = computed(() => this.data()?.raspberry ?? null);
-  readonly batteries = computed(() => this.data()?.batteries ?? waitingBatteries);
+  readonly batteries = waitingBatteries;
   readonly sampleTime = computed(() => {
     const stamp = this.data()?.stamp;
     return stamp ? stamp.sec * 1000 + stamp.nanosec / 1e6 : null;
@@ -32,6 +32,10 @@ export class DiagnosticsComponent {
   uptime(seconds: number | null | undefined): string {
     if (seconds == null) return '—';
     return `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min`;
+  }
+
+  memoryBytes(bytes: number | null | undefined): string {
+    return bytes == null ? '—' : this.format(bytes / 1024 ** 3, 'GiB');
   }
 
   statusLabel(status: DiagnosticStatus | undefined): string {

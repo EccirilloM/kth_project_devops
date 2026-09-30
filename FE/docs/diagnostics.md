@@ -1,91 +1,81 @@
-# Diagnostica: contratto provvisorio v1
+# Diagnostica Raspberry
 
-La pagina **Diagnostics** è accessibile al profilo Staff (`AuthRoles.Admin`).
-Guest non ha il link nel menu, viene reindirizzato se apre `/#/diagnostics` e non
-sottoscrive il topic diagnostico. Per rendere i dati riservati anche fuori dalla WebApp,
-le ACL del broker devono negare quel topic alle credenziali Guest: il permesso globale
-Subscribe Only permette comunque di leggerlo con un altro client MQTT.
+La pagina **Diagnostics** riceve il messaggio `sail_msgs/msg/RaspberryDiagnostics`
+serializzato in JSON dal gateway ROS/MQTT, sul topic **`sail_gui/data/diagnostics`**
+(plurale, senza slash iniziale).
 
-Il nodo ROS e il relativo messaggio custom **non sono ancora implementati**.
-Questo documento propone il JSON atteso dal frontend, da concordare con chi sviluppa ROS.
-DTO: `src/app/dtos/DiagnosticData.ts`; validazione: `src/app/core/mqtt/diagnostic-payload.ts`.
+La WebApp usa MQTT via WebSocket, come per gli altri dati della barca: il gateway
+deve inoltrare questo messaggio sul broker. La sola pubblicazione su ROS non basta.
+Il formato provvisorio con `schema_version`, `raspberry` e `batteries` è stato sostituito
+dal messaggio piatto riportato sotto.
 
-## Trasporto
+## Accesso e disponibilità
 
-- Topic esatto: `sail_gui/data/diagnostic` (singolare).
-- Un messaggio è una fotografia completa: non viene unito al precedente.
-- JSON UTF-8; misure numeriche, senza unità nel valore.
-- Pubblicazione periodica suggerita: ogni 2–5 secondi, `retain=false`.
-- Dopo 15 secondi senza campioni validi la pagina mostra dati non disponibili.
+La pagina e la sottoscrizione sono riservate a Staff (`AuthRoles.Admin`). Guest
+non sottoscrive il topic e viene reindirizzato se apre `/#/diagnostics`.
+Le ACL del broker devono autorizzare Staff sul topic nuovo e negarlo a Guest
+per proteggere i dati anche fuori dalla WebApp.
+
+- Ogni messaggio sostituisce completamente il campione precedente, incluso `device_id`.
+- Dopo 15 secondi senza campioni accettati i dati diventano non disponibili.
   La durata è configurabile con `diagnosticTimeoutMs` in `app-config.ts`.
-- Disconnessione e logout cancellano i dati. Il retained iniziale viene ignorato.
-- Il verde MQTT nella navbar conferma la connessione al broker, non la presenza di dati ROS.
-- La pagina non pubblica comandi.
+- La scadenza si misura dall'arrivo; l'orario mostrato deriva da `stamp`, nel fuso del browser.
+- Disconnessione e logout cancellano i dati; i messaggi retained vengono ignorati.
+- La pagina non pubblica comandi. Il verde MQTT indica la connessione al broker,
+  non la ricezione della diagnostica.
 
-## Esempio di payload (valori illustrativi, non mostrati come dati reali)
+## Esempio di payload
+
+Valori illustrativi, non dati reali:
 
 ```json
 {
-  "schema_version": 1,
   "stamp": { "sec": 1790182800, "nanosec": 0 },
-  "raspberry": {
-    "temperature_c": 48.2,
-    "cpu_usage_percent": 23.5,
-    "memory_usage_percent": 41.0,
-    "uptime_s": 7200,
-    "status": "ok"
-  },
-  "batteries": [
-    {
-      "id": "main",
-      "name": "Batteria principale",
-      "level_percent": 82,
-      "voltage_v": 12.6,
-      "current_a": 1.4,
-      "temperature_c": 28.3,
-      "status": "ok"
-    },
-    {
-      "id": "aux",
-      "name": "Batteria ausiliaria",
-      "level_percent": 35,
-      "voltage_v": 12.1,
-      "current_a": null,
-      "temperature_c": null,
-      "status": "unknown"
-    }
-  ]
+  "device_id": "raspberry-main",
+  "temperature": 48.2,
+  "temperature_valid": true,
+  "cpu_usage_percent": 23.5,
+  "cpu_valid": true,
+  "memory_used_bytes": 1073741824,
+  "memory_total_bytes": 4294967296,
+  "memory_valid": true,
+  "uptime_seconds": 7200.5,
+  "uptime_valid": true
 }
 ```
 
-## Campi e valori mancanti
+## Interpretazione
 
-`schema_version: 1`, `stamp` e `batteries` sono obbligatori. `stamp` usa il formato ROS
-con secondi Unix interi non negativi e nanosecondi interi fra 0 e 999999999.
-La pagina mostra l'orario del campione nel fuso del browser. La scadenza è invece
-misurata dall'arrivo: non garantisce l'età del campione sul sensore.
+- `stamp`: secondi interi int32 ROS e nanosecondi interi tra 0 e 999999999.
+- `device_id`: identificativo non vuoto, mostrato sulla scheda Raspberry.
+- `temperature`: temperatura in °C, usata solo se `temperature_valid` è true.
+- `cpu_usage_percent`: percentuale 0–100, usata solo se `cpu_valid` è true.
+- `memory_used_bytes` e `memory_total_bytes`: RAM utilizzata e totale in byte,
+  usate solo se `memory_valid` è true. La percentuale è `used / total * 100`;
+  la scheda mostra anche utilizzata/totale in GiB (1 GiB = 1024³ byte).
+- `uptime_seconds`: tempo di attività non negativo, usato solo se `uptime_valid` è true;
+  la pagina lo presenta in ore e minuti.
 
-`raspberry` può essere assente o null. Tutte le misure possono essere omesse o null:
-la pagina mostra **—**, mai uno zero inventato. Zero è un valore valido, anche per la carica.
-Le percentuali usano l'intervallo **0–100**, non 0–1. Tensione e uptime sono non negativi;
-la corrente può essere negativa (convenzione proposta: positiva in scarica, negativa in carica).
-Le temperature sono in °C. Il frontend non decide soglie di allarme per hardware ancora da definire.
+I flag sono booleani obbligatori. Con un flag false la relativa misura appare come **—**:
+nessun valore segnaposto viene interpretato come una misura reale. Con un flag true,
+la misura deve essere presente, numerica, finita e nell'intervallo previsto. Zero è valido.
+Per la RAM servono interi non negativi rappresentabili esattamente in JavaScript,
+con totale maggiore di zero e utilizzata non superiore al totale.
 
-`status` ammette `ok`, `warning`, `error`, `unknown`; omesso/null equivale a `unknown`.
-Lo stato proviene dal nodo diagnostico: ricevere un messaggio non implica che il dispositivo sia sano.
+Un messaggio malformato viene scartato interamente senza rinnovare il timeout del
+campione precedente. Un messaggio con tutti i flag false è invece accettato:
+identifica un campione ricevuto con misure non disponibili. I campi aggiuntivi vengono ignorati.
 
-`batteries` è una lista dinamica (0–32 elementi). Ogni batteria richiede un `id` univoco,
-stabile e non vuoto (massimo 80 caratteri); `name` è facoltativo e ha lo stesso limite.
-L'assenza di una batteria nel nuovo messaggio la rimuove dalla pagina.
-In assenza di campioni compaiono due schede vuote; non indicano il rilevamento di due batterie.
+Il messaggio non contiene uno stato di salute complessivo né dati delle batterie.
+Non vengono dedotte soglie di allarme dai flag di validità. Le schede batterie
+restano vuote con una spiegazione esplicita; non rappresentano batterie rilevate.
 
-Versione sconosciuta, misure malformate, percentuali fuori intervallo e ID duplicati
-fanno scartare l'intero messaggio. Il vecchio campione scade normalmente, senza rinnovo
-del timeout. I campi aggiuntivi vengono ignorati per facilitare estensioni compatibili.
+DTO della vista: `src/app/dtos/DiagnosticData.ts`.
+Adattamento e validazione: `src/app/core/mqtt/diagnostic-payload.ts`.
 
 ## Verifica
 
-I test locali usano un client simulato per validazione, ruoli, scadenza e disconnessione.
-Quando sarà disponibile il nodo ROS, verificare il payload reale, la frequenza e le ACL.
-Staff deve poter sottoscrivere il nuovo topic; con una ACL limitata ai vecchi topic
-il login Staff fallisce finché non viene autorizzata anche la nuova sottoscrizione.
+I test locali coprono il formato ROS, conversione RAM, zeri, flag di validità,
+payload malformati, topic esatto, ruoli, scadenza, logout e disconnessione con un client simulato.
+La verifica sulla barca richiede gateway e broker attivi con inoltro del nuovo topic
+in JSON e ACL Staff aggiornate.
