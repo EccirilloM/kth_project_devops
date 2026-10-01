@@ -1,5 +1,16 @@
 # Sail Monitoring Web
 
+## DD2482 course baseline
+
+This course project is based on `Sailing-Team-Polimi/sail_monitoring_web`,
+branch `main`, commit `32db3ae3312734cab72c478a86d740a65150e7e8`.
+This upstream baseline was frozen on 2026-10-01: subsequent Sailing Team
+updates will not be incorporated into the course project. Course development
+continues independently in this repository.
+
+See the [parallel work plan](docs/WORK_PLAN.md) for responsibilities,
+dependencies and acceptance checks. Planned work is not verified functionality.
+
 WebApp Angular che comunica direttamente con il broker MQTT via WebSocket TLS.
 Docker serve per lavorare sul PC senza installare Node, npm o Angular CLI.
 Il deploy su GitHub Pages è indipendente da Docker.

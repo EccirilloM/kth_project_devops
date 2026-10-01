@@ -1,0 +1,47 @@
+# Dependencies, build output and caches
+node_modules/
+dist/
+.angular/
+.npm/
+
+# Test results and diagnostics
+coverage/
+test-results/
+playwright-report/
+blob-report/
+*.log
+
+# Local environment and generated secrets (examples must contain placeholders only)
+.env
+.env.*
+!.env.example
+!.env.*.example
+.runtime/
+.secrets/
+secrets/
+
+# Generated TLS material
+*.key
+*.pem
+*.crt
+*.csr
+*.srl
+*.p12
+*.pfx
+
+# Terraform working data, state, saved plans and local variable values
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+!*.example.tfvars.json
+# Keep .terraform.lock.hcl tracked to pin provider dependencies.
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
