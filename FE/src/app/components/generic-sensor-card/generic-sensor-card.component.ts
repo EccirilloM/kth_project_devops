@@ -14,6 +14,8 @@ export class GenericSensorCardComponent {
   @Input() unit?: string;
   @Input() failed: boolean = false;
 
+  
+
   @ContentChild(TemplateRef) customContent?: TemplateRef<any>;
 
   get hasCustomContent(): boolean {
