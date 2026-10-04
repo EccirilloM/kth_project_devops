@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/services/auth.service';
-import { APP_CONFIG } from '../../core/mqtt/app-config';
+import { APP_CONFIG_TOKEN } from '../../core/mqtt/app-config.token';
 
 @Component({
   selector: 'app-login', imports: [FormsModule],
@@ -12,7 +12,8 @@ export class LoginComponent {
   password = 'Guest1234';
   errorMsg = '';
   isLoading = false;
-  readonly configured = Boolean(APP_CONFIG.brokerUrl);
+  private readonly config = inject(APP_CONFIG_TOKEN);
+  readonly configured = Boolean(this.config.brokerUrl);
   private readonly auth = inject(AuthService);
   async onSubmit(): Promise<void> {
     if (this.isLoading) return;

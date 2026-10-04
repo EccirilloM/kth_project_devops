@@ -1,0 +1,68 @@
+import mqtt from 'mqtt';
+import { createBoat, step, telemetry } from './boat.js';
+import { handleCommand } from './commands.js';
+import { MAX_PAYLOAD_BYTES, TOPICS } from './topics.js';
+
+const url = process.env.MQTT_URL || 'mqtt://127.0.0.1:1883';
+const hz = Number(process.env.TELEMETRY_HZ_MS || 1000);
+const boat = createBoat();
+
+const client = mqtt.connect(url, {
+  protocolVersion: 5,
+  clean: true,
+  clientId: process.env.MQTT_CLIENT_ID || `sail-sim-${process.pid}`,
+  username: process.env.MQTT_USERNAME || 'simulator',
+  password: process.env.MQTT_PASSWORD || 'simulatorpass',
+  reconnectPeriod: 2000,
+  connectTimeout: 10000,
+  queueQoSZero: false,
+});
+
+let timer: NodeJS.Timeout | undefined;
+let prev = Date.now();
+
+function pub(topic: string, payload: unknown, qos: 0 | 1 = 0) {
+  const buf = Buffer.from(JSON.stringify(payload));
+  if (buf.length > MAX_PAYLOAD_BYTES) return;
+  client.publish(topic, buf, { qos, retain: false });
+}
+
+function tick() {
+  if (!client.connected) return;
+  const now = Date.now();
+  let dt = (now - prev) / 1000;
+  if (dt < 0.05) dt = 0.05;
+  if (dt > 2) dt = 2;
+  prev = now;
+  step(boat, now, dt);
+  for (const m of telemetry(boat, now)) pub(m.topic, m.payload);
+}
+
+console.log('connecting', url);
+
+client.on('connect', () => {
+  console.log('connected');
+  client.subscribe(TOPICS.cmdWildcard, { qos: 1 });
+  if (timer) clearInterval(timer);
+  prev = Date.now();
+  timer = setInterval(tick, hz);
+  tick();
+});
+
+client.on('message', (topic, payload, packet) => {
+  if (packet.retain) return;
+  for (const m of handleCommand(boat, topic, payload)) {
+    pub(m.topic, m.payload, m.qos ?? 0);
+  }
+});
+
+client.on('error', (e) => console.error(e.message));
+
+process.on('SIGINT', () => {
+  if (timer) clearInterval(timer);
+  client.end(true, () => process.exit(0));
+});
+process.on('SIGTERM', () => {
+  if (timer) clearInterval(timer);
+  client.end(true, () => process.exit(0));
+});

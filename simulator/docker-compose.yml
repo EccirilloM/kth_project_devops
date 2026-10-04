@@ -1,0 +1,69 @@
+# Local lab + DigitalOcean runtime: Caddy (WSS /mqtt) → Mosquitto ← TypeScript emulator
+name: sail-mqtt-lab
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/password_file:/mosquitto/config/password_file:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+    # TCP for emulator / local debug clients (bind localhost; public access is WSS via Caddy)
+    ports:
+      - "${MQTT_TCP_BIND:-127.0.0.1}:1883:1883"
+    networks:
+      - mqtt
+    healthcheck:
+      # Password matches lab default in mosquitto/password_file (see README).
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -u simulator -P simulatorpass -t '$$SYS/broker/uptime' -C 1 -W 3 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:80:80"
+      - "${HTTPS_BIND:-0.0.0.0}:443:443"
+    environment:
+      MQTT_SITE: ${MQTT_SITE:-localhost}
+    volumes:
+      # Local default: Caddyfile + ./certs. Droplet deploy sets CADDYFILE=./Caddyfile.aws.
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - mqtt
+
+  simulator:
+    # Local: `docker compose up --build`. Droplet/CI: set GHCR_IMAGE and `docker compose pull`.
+    image: ${GHCR_IMAGE:-mqtt-emulator:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_started
+    environment:
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_USERNAME: simulator
+      MQTT_PASSWORD: ${SIMULATOR_PASSWORD:-simulatorpass}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-sail-sim-1}
+      TELEMETRY_HZ_MS: ${TELEMETRY_HZ_MS:-1000}
+    networks:
+      - mqtt
+
+networks:
+  mqtt:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

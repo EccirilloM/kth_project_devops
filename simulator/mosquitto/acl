@@ -1,0 +1,33 @@
+# Guest: read-only dashboard / mechatronics / indicators (FE guest subscriptions)
+user guest
+topic read sail_gui/data/dashboard_data
+topic read sail_gui/data/mechatronics_data
+topic read sail_gui/data/indicators
+
+user Guest
+topic read sail_gui/data/dashboard_data
+topic read sail_gui/data/mechatronics_data
+topic read sail_gui/data/indicators
+
+# Operator (+ FE username aliases): full data + rsp; publish commands
+user operator
+topic read sail_gui/data/#
+topic read sail_gui/rsp/#
+topic write sail_gui/cmd/#
+
+user Staff
+topic read sail_gui/data/#
+topic read sail_gui/rsp/#
+topic write sail_gui/cmd/#
+
+user staff
+topic read sail_gui/data/#
+topic read sail_gui/rsp/#
+topic write sail_gui/cmd/#
+
+# Emulator: publish telemetry/rsp; subscribe to commands
+user simulator
+topic write sail_gui/data/#
+topic write sail_gui/rsp/#
+topic read sail_gui/cmd/#
+topic read $SYS/#

@@ -1,0 +1,12 @@
+# Local backend / var files (examples stay tracked)
+backend.hcl
+backend.tf
+terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
