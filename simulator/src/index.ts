@@ -19,7 +19,6 @@ const client = mqtt.connect(url, {
 });
 
 let timer: NodeJS.Timeout | undefined;
-let prev = Date.now();
 
 function pub(topic: string, payload: unknown, qos: 0 | 1 = 0) {
   const buf = Buffer.from(JSON.stringify(payload));
@@ -29,13 +28,8 @@ function pub(topic: string, payload: unknown, qos: 0 | 1 = 0) {
 
 function tick() {
   if (!client.connected) return;
-  const now = Date.now();
-  let dt = (now - prev) / 1000;
-  if (dt < 0.05) dt = 0.05;
-  if (dt > 2) dt = 2;
-  prev = now;
-  step(boat, now, dt);
-  for (const m of telemetry(boat, now)) pub(m.topic, m.payload);
+  step(boat);
+  for (const m of telemetry(boat, Date.now())) pub(m.topic, m.payload);
 }
 
 console.log('connecting', url);
@@ -44,7 +38,6 @@ client.on('connect', () => {
   console.log('connected');
   client.subscribe(TOPICS.cmdWildcard, { qos: 1 });
   if (timer) clearInterval(timer);
-  prev = Date.now();
   timer = setInterval(tick, hz);
   tick();
 });
