@@ -1,0 +1,29 @@
+<section class="attitude" aria-label="Boat attitude">
+  <div class="attitude-heading">
+    <h2>Boat attitude</h2>
+    <p data-testid="ride-height">
+      @if (height() !== null) {
+        Ride height: {{ height() | number:'1.0-2' }} m
+      } @else {
+        Ride height unavailable
+      }
+    </p>
+  </div>
+  <div class="views">
+    @for (view of views(); track view.label) {
+      <figure>
+        <figcaption>{{ view.label }} <span>{{ view.metric }}</span></figcaption>
+        <div class="canvas">
+          <div class="water" aria-hidden="true"></div>
+          <div class="horizon" aria-hidden="true"></div>
+          @if (view.angle !== null) {
+            <img [src]="view.image" [alt]="view.label + ' of boat'" [style.transform]="boatTransform(view.angle)" />
+            <span class="angle">{{ view.angle | number:'1.0-1' }}°</span>
+          } @else {
+            <p class="unavailable">Waiting for fresh orientation data</p>
+          }
+        </div>
+      </figure>
+    }
+  </div>
+</section>

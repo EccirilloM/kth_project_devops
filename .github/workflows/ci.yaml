@@ -1,0 +1,205 @@
+name: CI and frontend delivery
+
+on:
+  push:
+    branches: [main, ettore]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Frontend quality and smoke tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the Docker checks image
+        id: image
+        run: docker compose -f Docker/checks.compose.yaml build checks
+      - name: Lint, unit tests, TypeScript and production build
+        id: check
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run check
+      - name: Demonstrate the lint gate with a controlled violation
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run test:gates
+      - name: Audit all locked dependencies
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run audit
+      - name: Browser startup tests against the compiled artifact
+        if: ${{ !cancelled() && steps.check.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run test:smoke
+      - name: Preserve frontend diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/
+            FE/playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Store the checked frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean up the checks project
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
+  secrets:
+    name: Secret scanning and gate demonstration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build the scanner image
+        id: image
+        run: docker compose -f Docker/checks.compose.yaml build secrets
+      - name: Demonstrate rejection of a nonfunctional test token
+        run: docker compose -f Docker/checks.compose.yaml run --rm secrets /opt/kth-devops/check-secret-gate.sh
+      - name: Scan reachable history and the current source
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm secrets /opt/kth-devops/scan-secrets.sh
+      - name: Preserve redacted scanner reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-diagnostics-${{ github.sha }}
+          path: FE/test-results/secrets/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean up the scanner project
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
+  integration:
+    name: Real MQTT integration and Terraform idempotence
+    needs: [quality, secrets]
+    if: vars.LAB_INTEGRATION_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KTH_ENVIRONMENT_ID: kth-devops-it-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Build test tooling without rebuilding the frontend
+        run: docker compose -f Docker/checks.compose.yaml build checks
+      - name: Validate and provision the disposable Terraform laboratory
+        id: provision
+        run: bash ci/lab/run.sh up
+      - name: Check no-change plans before and after a second apply
+        run: bash ci/lab/run.sh idempotence
+      - name: Test the real WSS broker and browser
+        run: bash ci/lab/run.sh test
+      - name: Collect sanitized laboratory logs
+        if: ${{ always() && steps.provision.outcome != 'skipped' }}
+        run: bash ci/lab/run.sh logs
+      - name: Preserve laboratory evidence before teardown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/integration/
+            FE/test-results/lab-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Destroy only this laboratory, also after failures
+        if: ${{ always() && steps.provision.outcome != 'skipped' }}
+        run: bash ci/lab/run.sh down
+
+  delivery:
+    name: Package frontend delivery candidate
+    needs: [quality, secrets]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Verify that delivery reuses the tested files
+        run: >-
+          docker run --rm
+          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE,readonly"
+          --workdir /app/FE node:24-bookworm-slim
+          node scripts/artifact.mjs verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-delivery-candidate-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+          if-no-files-found: error
+          retention-days: 14
+
+  pages-package:
+    name: Prepare validated Pages artifact
+    needs: [quality, secrets, integration]
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+      vars.PAGES_DEPLOY_ENABLED == 'true' && needs.integration.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Supply public settings without rebuilding the frontend
+        env:
+          KTH_PUBLIC_CONFIG: ${{ vars.PAGES_PUBLIC_CONFIG_JSON }}
+        run: >-
+          docker run --rm --env KTH_PUBLIC_CONFIG
+          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE"
+          --workdir /app/FE node:24-bookworm-slim
+          node --experimental-transform-types --import ./tests/register.mjs
+          scripts/prepare-delivery.mjs --env
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: FE/dist/sail-monitoring-web/browser/
+
+  deploy:
+    name: Deploy validated frontend to GitHub Pages
+    needs: [pages-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy the uploaded artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

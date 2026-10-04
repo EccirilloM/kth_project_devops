@@ -1,0 +1,20 @@
+name: kth-devops-checks
+
+services:
+  checks:
+    build:
+      context: ..
+      dockerfile: Docker/Checks.Dockerfile
+    init: true
+    shm_size: 1gb
+    volumes:
+      - ../FE/dist:/app/FE/dist
+      - ../FE/test-results:/app/FE/test-results
+      - ../FE/playwright-report:/app/FE/playwright-report
+  secrets:
+    build:
+      context: ..
+      dockerfile: Docker/Security.Dockerfile
+    volumes:
+      - ..:/repo:ro
+      - ../FE/test-results/secrets:/reports

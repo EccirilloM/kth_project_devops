@@ -1,0 +1,7 @@
+**
+!Docker/
+!Docker/Security.Dockerfile
+!ci/
+!ci/scan-secrets.sh
+!ci/check-secret-gate.sh
+!ci/verify-secrets.sh

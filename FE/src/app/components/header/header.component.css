@@ -1,0 +1,31 @@
+:host { display: block; }
+.app-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #293246;
+  border-radius: 1rem;
+  background: #101722;
+}
+.brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; }
+.brand img { width: 42px; height: 42px; object-fit: contain; }
+nav { display: flex; gap: 0.4rem; }
+nav a, button { padding: 0.55rem 0.8rem; border-radius: 0.5rem; }
+nav a { color: #b9c5d6; }
+nav a:hover, nav a.active { background: #20354b; color: #8bdbff; }
+.session { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-left: auto; font-size: 0.85rem; }
+.connection { display: inline-flex; align-items: center; gap: 0.4rem; color: #fbbf24; }
+.connection.connected { color: #86efac; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.role { color: #b9c5d6; }
+button { border: 1px solid #42516a; }
+button:hover { background: #20354b; }
+a:focus-visible, button:focus-visible { outline: 2px solid #8bdbff; outline-offset: 3px; }
+@media (max-width: 680px) {
+  .app-header { gap: 0.65rem; }
+  .brand { flex: 1; }
+  .session { width: 100%; margin-left: 0; }
+  .session button { margin-left: auto; }
+}

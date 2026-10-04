@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "disposable": true,
+  "environmentId": "kth-devops-it-example",
+  "network": "kth-devops-it-example-network",
+  "frontendUrl": "http://frontend/",
+  "brokerUrl": "wss://broker:9001/mqtt",
+  "brokerContainer": "kth-devops-it-example-broker",
+  "simulatorContainer": "kth-devops-it-example-simulator",
+  "dataTimeoutMs": 2000,
+  "operator": {"username": "operator", "password": "GENERATE_A_RANDOM_PASSWORD_AT_RUNTIME"},
+  "guest": {"username": "guest", "password": "GENERATE_A_RANDOM_PASSWORD_AT_RUNTIME"},
+  "probe": {"username": "probe", "password": "GENERATE_A_RANDOM_PASSWORD_AT_RUNTIME"}
+}

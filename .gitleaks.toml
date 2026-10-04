@@ -1,0 +1,10 @@
+title = "KTH DevOps secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "kth-devops-demo-token"
+description = "Deliberately nonfunctional course token used to demonstrate the gate"
+regex = '''\bkth_devops_demo_[a-z0-9]{32}\b'''
+keywords = ["kth_devops_demo_"]

@@ -14,7 +14,7 @@ fi
 command -v docker >/dev/null || { echo 'Docker non trovato. Installare Docker Desktop.' >&2; exit 1; }
 docker compose version >/dev/null
 
-echo 'Preparazione del container di sviluppo...'
+echo 'Preparing the kth-devops-dev development container...'
 docker compose -f "$COMPOSE_FILE" build
 if ! docker compose -f "$COMPOSE_FILE" up --wait --wait-timeout 600; then
   echo 'Preparazione non completata. Ultimi messaggi del container:' >&2
@@ -22,7 +22,7 @@ if ! docker compose -f "$COMPOSE_FILE" up --wait --wait-timeout 600; then
   exit 1
 fi
 
-echo 'Container pronto. Dipendenze installate; Angular non avviato.'
+echo 'kth-devops-dev container ready. Dependencies installed; Angular is not running yet.'
 echo 'Collegati al container con VS Code e apri /app/FE.'
 echo 'Poi esegui: ng serve'
 echo 'Il sito sara disponibile su http://localhost:4200'

@@ -1,28 +1,37 @@
-// FE/src/app/pages/dashboard/dashboard.component.ts
-import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { SensorUpdate } from '../../dtos/sensor/SensorUpdate';
-import { SensorType } from '../../dtos/sensor/SensorType';
-import { DashboardService } from '../../core/services/dashboard.service';
-import { GenericSensorCardComponent } from '../../components/generic-sensor-card/generic-sensor-card.component';
-
-import { YawCardComponent } from '../../components/yaw-card/yaw-card.component';
-
-import { SensorUnitMap } from '../../dtos/sensor/SensorType';
-import { Observable } from 'rxjs/internal/Observable';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { TelemetryService } from '../../core/services/telemetry.service';
+import { AuthService } from '../../core/services/auth.service';
+import { CommandService } from '../../core/services/command.service';
+import { ClientCommandFactory } from '../../dtos/commands/ClientCommandFactory';
+import { VisualizationComponent } from '../../components/visualization/visualization.component';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule, GenericSensorCardComponent, YawCardComponent],
+  imports: [CommonModule, VisualizationComponent],
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  styleUrls: ['./dashboard.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardComponent {
-  sensorUnitMap = SensorUnitMap;
-  sensorData$: Observable<Record<SensorType, SensorUpdate & { failed: boolean }> | null>;
+  private readonly telemetry = inject(TelemetryService);
+  readonly auth = inject(AuthService);
+  readonly commands = inject(CommandService);
+  readonly dashboard = toSignal(this.telemetry.dashboardData$, {requireSync: true});
+  readonly mechatronics = toSignal(this.telemetry.mechatronicsData$, {requireSync: true});
+  readonly indicators = toSignal(this.telemetry.indicatorsState$, {requireSync: true});
+  readonly measurements = [
+    {key: 'roll', label: 'Roll', description: 'Side-to-side tilt'},
+    {key: 'pitch', label: 'Pitch', description: 'Bow-to-stern tilt'},
+    {key: 'yaw', label: 'Yaw', description: 'Heading'},
+  ] as const;
 
-  constructor(private dashboardService: DashboardService) {
-    this.sensorData$ = this.dashboardService.snapshot$;
+  startRecording(): void {
+    this.commands.sendCommand(ClientCommandFactory.startRecording());
+  }
+
+  stopRecording(): void {
+    this.commands.sendCommand(ClientCommandFactory.stopRecording());
   }
 }

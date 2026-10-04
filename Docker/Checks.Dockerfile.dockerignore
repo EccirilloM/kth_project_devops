@@ -1,0 +1,12 @@
+**
+!FE/
+!FE/**
+!Docker/
+!Docker/Checks.Dockerfile
+FE/node_modules
+FE/dist
+FE/.angular
+FE/test-results
+FE/playwright-report
+FE/.env
+FE/.env.*

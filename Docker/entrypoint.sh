@@ -2,8 +2,8 @@
 set -eu
 
 cd /app/FE
-rm -f /tmp/sail-dev-ready
-echo 'Installazione delle dipendenze nel volume Docker...'
+rm -f /tmp/kth-devops-ready
+echo 'Installing dependencies in the kth-devops Docker volume...'
 if [ -f package-lock.json ]; then
   npm ci --no-audit --no-fund
 else
@@ -11,6 +11,6 @@ else
   npm install --no-audit --no-fund
 fi
 
-touch /tmp/sail-dev-ready
-echo 'Dipendenze installate. Workspace pronto; Angular non avviato.'
+touch /tmp/kth-devops-ready
+echo 'Dependencies installed. kth-devops workspace ready; Angular is not running yet.'
 exec "$@"
