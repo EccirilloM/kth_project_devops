@@ -24,9 +24,13 @@ jobs:
       contents: read
       packages: write
     env:
-      DOCKER_CONFIG: ${{ runner.temp }}/ghcr-auth
       SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
     steps:
+      - name: Prepare isolated registry authentication directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/ghcr-auth"
+          chmod 700 "$RUNNER_TEMP/ghcr-auth"
+          printf 'DOCKER_CONFIG=%s/ghcr-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: simulator-image-${{ github.sha }}
