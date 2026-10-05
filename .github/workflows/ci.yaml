@@ -2,7 +2,7 @@ name: CI and frontend delivery
 
 on:
   push:
-    branches: [main, ettore]
+    branches: [main, dev, ettore]
   pull_request:
     branches: [main]
   workflow_dispatch:
