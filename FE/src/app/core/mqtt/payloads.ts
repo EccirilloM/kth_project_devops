@@ -34,16 +34,14 @@ function coordinates(lat: unknown, lon: unknown): void {
 }
 
 export function dashboardPayload(value: unknown): DashboardData {
-  return numeric(value, ['roll','pitch','yaw','sog','vmg','twa','twd','tws']) as unknown as DashboardData;
+  return numeric(value, ['roll','pitch','yaw']) as unknown as DashboardData;
 }
 export function mechatronicsPayload(value: unknown): MechatronicsData {
-  return numeric(value, ['servo_limit_max','servo_limit_min','kp','ki','kd','current_height_est_wand',
-    'current_height_est_ultrasound','ultrasound_data','height_target','flap_angle_out','servo_angle_out',
-    'roll','pitch','wand_angle']) as unknown as MechatronicsData;
+  return numeric(value, ['current_height_est_wand','current_height_est_ultrasound']) as unknown as MechatronicsData;
 }
 
 export function mapPayload(value: unknown): MapData {
-  const data = numeric(value, ['lat','lon','yaw','twd','tws','ttl','dtl']);
+  const data = numeric(value, ['lat','lon','yaw']);
   coordinates(data['lat'], data['lon']);
   const marks: Mark[] = [];
   if (Array.isArray(data['marks'])) for (const raw of data['marks']) {

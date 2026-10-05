@@ -5,11 +5,9 @@ import type { MechatronicsData } from '../src/app/dtos/MechatronicsData';
 import type { IndicatorsState } from '../src/app/dtos/indicator/Indicator.telemetry';
 
 const data: MechatronicsData = {
-  stamp: {sec: 1, nanosec: 0}, servo_limit_max: 30, servo_limit_min: -30,
-  kp: 1, ki: 0, kd: 0, current_height_est_wand: 0,
-  current_height_est_ultrasound: 0.4, ultrasound_data: 0.4,
-  height_target: 0.5, flap_angle_out: 0, servo_angle_out: 0,
-  roll: 0, pitch: 0, wand_angle: 0,
+  stamp: {sec: 1, nanosec: 0},
+  current_height_est_wand: 0,
+  current_height_est_ultrasound: 0.4,
 };
 function selection(value: number, failed = false): IndicatorsState {
   return {ACTIVE_SENSOR: {value, failed, canIncrease: false, canDecrease: false}} as IndicatorsState;

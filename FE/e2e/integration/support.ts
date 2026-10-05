@@ -62,6 +62,5 @@ export async function live(page: Page): Promise<void> {
 }
 
 export function sample(roll = 12, pitch = -3, yaw = 87) {
-  return {stamp: {sec: Math.floor(Date.now() / 1000), nanosec: 0}, roll, pitch, yaw,
-    sog: 4, vmg: 3, twa: 35, twd: 125, tws: 8};
+  return {stamp: {sec: Math.floor(Date.now() / 1000), nanosec: 0}, roll, pitch, yaw};
 }

@@ -2,7 +2,8 @@
 !FE/
 !FE/**
 !Docker/
-!Docker/Checks.Dockerfile
+!Docker/frontend-checks/
+!Docker/frontend-checks/Dockerfile
 FE/node_modules
 FE/dist
 FE/.angular

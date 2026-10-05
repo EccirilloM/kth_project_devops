@@ -2,8 +2,6 @@ import { StateCell as BehaviorSubject } from './state-cell';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import { type AppConfig, brokerUrl, roleForUsername } from './app-config';
 import { TOPICS } from './topics';
-import { diagnosticPayload } from './diagnostic-payload';
-import type { DiagnosticData } from '../../dtos/DiagnosticData';
 import { commandPayload, dashboardPayload, indicatorsPayload, mapPayload, mechatronicsPayload, object, recordingPayload } from './payloads';
 import { AuthRoles } from '../../dtos/auth/auth-roles';
 import type { DashboardData } from '../../dtos/DashboardData';
@@ -29,7 +27,6 @@ export class MqttSession {
   readonly mechatronics$ = new BehaviorSubject<MechatronicsData | null>(null);
   readonly indicators$ = new BehaviorSubject<IndicatorsState | null>(null);
   readonly recording$ = new BehaviorSubject<RecordingState | null>(null);
-  readonly diagnostic$ = new BehaviorSubject<DiagnosticData | null>(null);
   readonly feedback$ = new BehaviorSubject('');
   readonly pending$ = new BehaviorSubject(false);
   readonly tick$ = new BehaviorSubject(0);
@@ -106,7 +103,7 @@ export class MqttSession {
       if (!current()) return;
       // Visualization needs heights/active sensor even for guests. Hidden pages do not hide data.
       const subscriptions: string[] = [TOPICS.dashboard, TOPICS.mechatronics, TOPICS.indicators];
-      if (credentials.role === AuthRoles.Admin) subscriptions.push(TOPICS.map, TOPICS.recording, TOPICS.diagnostic, TOPICS.startResponse, TOPICS.stopResponse);
+      if (credentials.role === AuthRoles.Admin) subscriptions.push(TOPICS.map, TOPICS.recording, TOPICS.startResponse, TOPICS.stopResponse);
       client.subscribe(subscriptions, {qos: 0, rap: false}, (error, grants) => {
         if (!current()) return;
         if (error || !grants || subscriptions.some(topic => !grants.some(grant => grant.topic === topic && Number(grant.qos) < 128))) {
@@ -190,9 +187,6 @@ export class MqttSession {
       case TOPICS.mechatronics: this.mechatronics$.next(mechatronicsPayload(data)); break;
       case TOPICS.indicators: this.indicators$.next(indicatorsPayload(data)); break;
       case TOPICS.recording: this.recording$.next(recordingPayload(data)); break;
-      case TOPICS.diagnostic:
-        if (this.role$.value !== AuthRoles.Admin) return;
-        this.diagnostic$.next(diagnosticPayload(data)); break;
       case TOPICS.startResponse:
       case TOPICS.stopResponse: this.response(topic, data); return;
       default: return;
@@ -203,8 +197,7 @@ export class MqttSession {
 
   fresh(topic: string): boolean {
     const time = this.seen.get(topic);
-    const ttl = topic === TOPICS.diagnostic ? this.config.diagnosticTimeoutMs
-      : topic === TOPICS.recording ? this.config.recordingTimeoutMs : this.config.dataTimeoutMs;
+    const ttl = topic === TOPICS.recording ? this.config.recordingTimeoutMs : this.config.dataTimeoutMs;
     return time !== undefined && Date.now() - time < ttl;
   }
 
@@ -285,11 +278,9 @@ export class MqttSession {
     this.seen.clear();
     this.dashboard$.next(null); this.map$.next(null); this.mechatronics$.next(null);
     this.indicators$.next(null); this.recording$.next(null);
-    this.diagnostic$.next(null);
     this.tick$.next(this.tick$.value + 1);
   }
   private expire(): void {
-    if (!this.fresh(TOPICS.diagnostic) && this.diagnostic$.value) this.diagnostic$.next(null);
     if (!this.fresh(TOPICS.dashboard) && this.dashboard$.value) this.dashboard$.next(null);
     if (!this.fresh(TOPICS.map) && this.map$.value) this.map$.next(null);
     if (!this.fresh(TOPICS.mechatronics) && this.mechatronics$.value) this.mechatronics$.next(null);

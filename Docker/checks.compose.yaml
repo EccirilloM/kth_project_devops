@@ -4,17 +4,33 @@ services:
   checks:
     build:
       context: ..
-      dockerfile: Docker/Checks.Dockerfile
+      dockerfile: Docker/frontend-checks/Dockerfile
     init: true
     shm_size: 1gb
     volumes:
       - ../FE/dist:/app/FE/dist
       - ../FE/test-results:/app/FE/test-results
       - ../FE/playwright-report:/app/FE/playwright-report
+  simulator-checks:
+    build:
+      context: ..
+      dockerfile: Docker/simulator-checks/Dockerfile
+    init: true
+    volumes:
+      - ../simulator/test-results:/app/simulator/test-results
+  simulator-image-test:
+    image: kth-devops-simulator:local
+    build:
+      context: ../simulator
+      dockerfile: Dockerfile
+    init: true
+    command: ["node", "--test", "test/model.test.mjs"]
+    volumes:
+      - ../simulator/test:/app/test:ro
   secrets:
     build:
       context: ..
-      dockerfile: Docker/Security.Dockerfile
+      dockerfile: Docker/security/Dockerfile
     volumes:
       - ..:/repo:ro
       - ../FE/test-results/secrets:/reports

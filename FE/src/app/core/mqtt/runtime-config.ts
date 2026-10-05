@@ -2,7 +2,7 @@ import { DEFAULT_APP_CONFIG, brokerUrl, type AppConfig } from './app-config';
 import { AuthRoles } from '../../dtos/auth/auth-roles';
 
 const numericKeys = [
-  'connectTimeoutMs', 'reconnectMs', 'dataTimeoutMs', 'diagnosticTimeoutMs',
+  'connectTimeoutMs', 'reconnectMs', 'dataTimeoutMs',
   'recordingTimeoutMs', 'commandTimeoutMs', 'maxPayloadBytes',
 ] as const;
 

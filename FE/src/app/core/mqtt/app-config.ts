@@ -13,7 +13,6 @@ export const DEFAULT_APP_CONFIG = {
   connectTimeoutMs: 12000,
   reconnectMs: 5000,
   dataTimeoutMs: 5000,
-  diagnosticTimeoutMs: 15000,
   recordingTimeoutMs: 5000,
   commandTimeoutMs: 10000,
   maxPayloadBytes: 65536,

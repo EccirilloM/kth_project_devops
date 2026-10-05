@@ -1,10 +1,10 @@
-name: CI and frontend delivery
+name: CI
 
 on:
   push:
-    branches: [main, dev, ettore]
+    branches: [main, dev, ettore, juozas]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -88,9 +88,62 @@ jobs:
         if: always()
         run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
 
+  simulator:
+    name: Simulator checks and container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build simulator checking tools
+        run: docker compose -f Docker/checks.compose.yaml build simulator-checks
+      - name: Check TypeScript, simulator behavior and all dependencies
+        run: docker compose -f Docker/checks.compose.yaml run --rm simulator-checks
+      - name: Build the runtime image for an amd64 server
+        run: |
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$SIMULATOR_IMAGE" simulator
+      - name: Verify behavior in the final non-root runtime image
+        run: |
+          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{.Config.User}}')" = node
+          docker run --rm --network none \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/simulator/test,target=/app/test,readonly" \
+            "$SIMULATOR_IMAGE" node --test test/model.test.mjs
+      - name: Save the tested image without rebuilding it
+        run: |
+          mkdir -p "$RUNNER_TEMP/simulator-image"
+          docker image inspect "$SIMULATOR_IMAGE" --format '{{.Id}}' > "$RUNNER_TEMP/simulator-image/image.id"
+          docker save "$SIMULATOR_IMAGE" --output "$RUNNER_TEMP/simulator-image/image.tar"
+          cd "$RUNNER_TEMP/simulator-image"
+          sha256sum image.tar > image.sha256
+      - name: Store the tested simulator image
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-image-${{ github.sha }}
+          path: ${{ runner.temp }}/simulator-image/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Preserve simulator check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-diagnostics-${{ github.sha }}
+          path: simulator/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean up simulator checking tools
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
   integration:
     name: Real MQTT integration and Terraform idempotence
-    needs: [quality, secrets]
+    needs: [quality, secrets, simulator]
     if: vars.LAB_INTEGRATION_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -130,76 +183,20 @@ jobs:
         if: ${{ always() && steps.provision.outcome != 'skipped' }}
         run: bash ci/lab/run.sh down
 
-  delivery:
-    name: Package frontend delivery candidate
-    needs: [quality, secrets]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-checked-${{ github.sha }}
-          path: FE/dist/sail-monitoring-web/browser/
-      - name: Verify that delivery reuses the tested files
-        run: >-
-          docker run --rm
-          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE,readonly"
-          --workdir /app/FE node:24-bookworm-slim
-          node scripts/artifact.mjs verify
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-delivery-candidate-${{ github.sha }}
-          path: FE/dist/sail-monitoring-web/browser/
-          if-no-files-found: error
-          retention-days: 14
-
-  pages-package:
-    name: Prepare validated Pages artifact
-    needs: [quality, secrets, integration]
+  cd:
+    name: Publish verified artifacts
+    needs: [quality, secrets, simulator, integration]
     if: >-
-      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-      vars.PAGES_DEPLOY_ENABLED == 'true' && needs.integration.result == 'success'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-checked-${{ github.sha }}
-          path: FE/dist/sail-monitoring-web/browser/
-      - name: Supply public settings without rebuilding the frontend
-        env:
-          KTH_PUBLIC_CONFIG: ${{ vars.PAGES_PUBLIC_CONFIG_JSON }}
-        run: >-
-          docker run --rm --env KTH_PUBLIC_CONFIG
-          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE"
-          --workdir /app/FE node:24-bookworm-slim
-          node --experimental-transform-types --import ./tests/register.mjs
-          scripts/prepare-delivery.mjs --env
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: FE/dist/sail-monitoring-web/browser/
-
-  deploy:
-    name: Deploy validated frontend to GitHub Pages
-    needs: [pages-package]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+      always() && !cancelled() && github.event_name == 'push' &&
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') &&
+      needs.quality.result == 'success' && needs.secrets.result == 'success' &&
+      needs.simulator.result == 'success' &&
+      (needs.integration.result == 'success' || needs.integration.result == 'skipped')
     permissions:
       contents: read
+      packages: write
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@v5
-      - name: Deploy the uploaded artifact
-        id: deployment
-        uses: actions/deploy-pages@v4
+    uses: ./.github/workflows/cd.yaml
+    with:
+      integration-passed: ${{ needs.integration.result == 'success' }}

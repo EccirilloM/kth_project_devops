@@ -5,7 +5,7 @@ services:
   web:
     build:
       context: ..
-      dockerfile: Docker/Dockerfile
+      dockerfile: Docker/dev/Dockerfile
     init: true
     ports:
       - "127.0.0.1:4200:4200"
