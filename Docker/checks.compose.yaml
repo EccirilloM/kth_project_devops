@@ -1,6 +1,13 @@
 name: kth-devops-checks
 
 services:
+  workflows:
+    image: rhysd/actionlint:1.7.12
+    working_dir: /repo
+    network_mode: none
+    volumes:
+      - ..:/repo:ro
+    command: ["-color", ".github/workflows/ci.yaml", ".github/workflows/cd.yaml"]
   checks:
     build:
       context: ..

@@ -23,6 +23,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # Also run locally before pushing: a workflow rejected by GitHub cannot run this step.
+      - name: Validate GitHub Actions workflows
+        run: docker compose -f Docker/checks.compose.yaml run --rm workflows
       - name: Build the Docker checks image
         id: image
         run: docker compose -f Docker/checks.compose.yaml build checks
