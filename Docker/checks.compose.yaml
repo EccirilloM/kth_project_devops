@@ -1,6 +1,15 @@
 name: kth-devops-checks
 
 services:
+  # Explicit maintenance command: update the host lockfile without host Node or scripts.
+  dependencies:
+    profiles: [maintenance]
+    image: node:24-bookworm-slim
+    working_dir: /app/FE
+    volumes:
+      - ../FE:/app/FE
+    entrypoint: ["npm"]
+    command: ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]
   workflows:
     image: rhysd/actionlint:1.7.12
     working_dir: /repo

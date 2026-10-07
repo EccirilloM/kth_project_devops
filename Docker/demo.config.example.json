@@ -1,0 +1,7 @@
+{
+  "brokerUrl": "wss://mqtt.devopsproject.lios.cloud/mqtt",
+  "users": {
+    "guest": "GUEST",
+    "operator": "ADMIN"
+  }
+}

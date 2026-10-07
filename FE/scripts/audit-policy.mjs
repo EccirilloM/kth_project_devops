@@ -10,3 +10,23 @@ export function auditDecision(report) {
   }
   return {blocked: counts.high > 0 || counts.critical > 0, counts};
 }
+
+export function auditDetails(report) {
+  return Object.entries(report.vulnerabilities).sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([name, finding]) => {
+      const lines = [`${name}: ${finding.severity} (affected range: ${finding.range ?? 'not reported'})`];
+      for (const cause of finding.via ?? []) {
+        if (typeof cause === 'string') lines.push(`  Via dependency: ${cause}`);
+        else if (cause && typeof cause === 'object') {
+          lines.push(`  ${cause.title ?? 'Dependency advisory'}${cause.url ? ' — ' + cause.url : ''}`);
+        }
+      }
+      const fix = finding.fixAvailable;
+      if (fix && typeof fix === 'object') {
+        lines.push(`  Proposed fix: ${fix.name}@${fix.version}${fix.isSemVerMajor ? ' (major upgrade; review compatibility)' : ''}`);
+      } else {
+        lines.push(fix ? '  Fix available; review the dependency update.' : '  No automatic fix reported.');
+      }
+      return lines;
+    });
+}

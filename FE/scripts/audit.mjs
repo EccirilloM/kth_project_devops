@@ -1,6 +1,6 @@
 import {spawnSync} from 'node:child_process';
 import {mkdirSync, writeFileSync} from 'node:fs';
-import {auditDecision} from './audit-policy.mjs';
+import {auditDecision, auditDetails} from './audit-policy.mjs';
 
 mkdirSync('test-results/security', {recursive: true});
 const result = spawnSync('npm', ['audit', '--json', '--audit-level=high'], {
@@ -14,6 +14,8 @@ try {
   const decision = auditDecision(report);
   writeFileSync('test-results/security/npm-audit.json', JSON.stringify(report, null, 2) + '\n');
   console.log('Dependency findings (including development dependencies):', decision.counts);
+  for (const line of auditDetails(report)) console.log(line);
+  console.log('Full audit report: test-results/security/npm-audit.json');
   // Reject unexpected nonzero results even if a malformed report claims zero findings.
   process.exitCode = decision.blocked || result.status !== 0 ? 1 : 0;
 } catch (error) {
