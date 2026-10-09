@@ -11,25 +11,23 @@ terraform {
 provider "digitalocean" {}
 
 variable "region" {
-  description = "Shared region for App Platform and DOCR (App Platform slug: ams, nyc, fra, …)"
   type        = string
   default     = "ams"
 }
 
 variable "registry_name" {
-  description = "Container registry name to create (must be unique)"
-  type        = string
-  default     = "mqtt-emulator-dev"
+  type    = string
+  default = "mqtt-emulator-dev"
 }
 
 variable "mosquitto_repository" {
-  type        = string
-  default     = "mqtt-mosquitto"
+  type    = string
+  default = "mqtt-mosquitto"
 }
 
 variable "simulator_repository" {
-  type        = string
-  default     = "mqtt-emulator"
+  type    = string
+  default = "mqtt-emulator"
 }
 
 variable "image_tag" {
@@ -38,9 +36,9 @@ variable "image_tag" {
 }
 
 variable "simulator_password" {
-  type        = string
-  default     = "simulatorpass"
-  sensitive   = true
+  type      = string
+  default   = "simulatorpass"
+  sensitive = true
 }
 
 variable "instance_size" {
@@ -49,23 +47,21 @@ variable "instance_size" {
 }
 
 variable "domain" {
-  description = "Custom hostname for the emulator (PRIMARY app domain)"
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "zone" {
-  type        = string
-  default     = ""
+  type    = string
+  default = ""
 }
 
 variable "project_name" {
-  type        = string
-  default     = "devopsboatproject"
+  type    = string
+  default = ""
 }
 
 locals {
-  # Little conversion of regions is needed cause app platform uses different region names
   docr_region = lookup(
     {
       ams = "ams3"
@@ -89,7 +85,6 @@ locals {
   )
 }
 
-# we could have went for ghcr but we have to use digital ocean's CR cause of app platform shinanigans
 resource "digitalocean_container_registry" "mqtt" {
   name                   = var.registry_name
   subscription_tier_slug = "starter"
@@ -97,6 +92,8 @@ resource "digitalocean_container_registry" "mqtt" {
 }
 
 resource "digitalocean_app" "mqtt" {
+  depends_on = [digitalocean_container_registry.mqtt]
+
   spec {
     name   = "mqtt-emulator"
     region = var.region
@@ -132,8 +129,8 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        repository = "${digitalocean_container_registry.mqtt.name}/${var.mosquitto_repository}"
-        tag        = var.image_tag
+        repository    = "${digitalocean_container_registry.mqtt.name}/${var.mosquitto_repository}"
+        tag           = var.image_tag
         deploy_on_push {
           enabled = true
         }
@@ -191,15 +188,16 @@ resource "digitalocean_record" "mqtt" {
 resource "digitalocean_project" "this" {
   count       = var.project_name != "" ? 1 : 0
   name        = var.project_name
-  description = "Boat MQTT emulator (for dev)"
+  description = "Boat MQTT emulator (dev)"
   purpose     = "Web App"
-  environment = "development"
+  environment = "Development"
 }
 
 resource "digitalocean_project_resources" "this" {
   count   = var.project_name != "" ? 1 : 0
   project = digitalocean_project.this[0].id
   resources = [
+    digitalocean_container_registry.mqtt.urn,
     digitalocean_app.mqtt.urn,
   ]
 }
@@ -212,12 +210,8 @@ output "app_url" {
   value = digitalocean_app.mqtt.live_url
 }
 
-output "default_ingress" {
-  value = digitalocean_app.mqtt.default_ingress
-}
-
 output "broker_wss_url" {
-  value       = "wss://${local.broker_host}/mqtt"
+  value = "wss://${local.broker_host}/mqtt"
 }
 
 output "registry_name" {
@@ -234,8 +228,4 @@ output "simulator_image" {
 
 output "mosquitto_image" {
   value = "${digitalocean_container_registry.mqtt.endpoint}/${var.mosquitto_repository}:${var.image_tag}"
-}
-
-output "project_id" {
-  value = try(digitalocean_project.this[0].id, null)
 }

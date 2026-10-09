@@ -1,15 +1,8 @@
+# Local use only — CI reads optional TF_* vars from GitHub Environment mqtt-dev.
 # export DIGITALOCEAN_TOKEN=dop_v1_...
 
 #region = "ams"
-
-#registry_name         = "mqtt-emulator-dev"
-#mosquitto_repository  = "mqtt-mosquitto"
-#simulator_repository  = "mqtt-emulator"
-#image_tag             = "latest"
-
-#simulator_password = "simulatorpass"
-
+#registry_name = "mqtt-emulator-dev"
 #domain = "mqtt-dev.example.com"
-#zone   = "example.com"
-
+#zone = "example.com"
 #project_name = "mqtt-emulator-dev"
