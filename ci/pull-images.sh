@@ -9,7 +9,7 @@ fi
 
 pull_log=$(mktemp)
 trap 'rm -f "$pull_log"' EXIT
-transient_error='500 Internal Server Error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|TLS handshake timeout|i/o timeout|connection reset by peer|unexpected EOF'
+transient_error='500 Internal Server Error|502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|TLS handshake timeout|i/o timeout|Client[.]Timeout exceeded while awaiting headers|net/http: timeout awaiting response headers|context deadline exceeded|connection reset by peer|unexpected EOF'
 
 for image in "$@"; do
   for attempt in 1 2 3; do
