@@ -5,3 +5,6 @@
 !src/
 !src/**
 !Dockerfile
+!Dockerfile.mosquitto
+!mosquitto/
+!mosquitto/**
