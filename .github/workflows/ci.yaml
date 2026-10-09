@@ -203,3 +203,4 @@ jobs:
     uses: ./.github/workflows/cd.yaml
     with:
       integration-passed: ${{ needs.integration.result == 'success' }}
+    secrets: inherit
