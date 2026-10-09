@@ -197,7 +197,6 @@ resource "digitalocean_project_resources" "this" {
   count   = var.project_name != "" ? 1 : 0
   project = digitalocean_project.this[0].id
   resources = [
-    digitalocean_container_registry.mqtt.urn,
     digitalocean_app.mqtt.urn,
   ]
 }
