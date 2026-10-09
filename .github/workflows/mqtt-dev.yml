@@ -1,8 +1,3 @@
-# Flow:
-#   1) terraform → registry
-#   2) build & push images to DOCR
-#   3) terraform → app (+ DNS / project if configured)
-
 name: MQTT emulator (dev)
 
 on:
@@ -19,8 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EMULATOR_IMAGE: mqtt-emulator
-  MOSQUITTO_IMAGE: mqtt-mosquitto
+  IMAGE_REPOSITORY: mqtt
   TF_IN_AUTOMATION: 'true'
 
 jobs:
@@ -118,24 +112,27 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 2) Build and push images
+      - name: 2) Build and push images (one DOCR repo, two tags)
         id: image
         working-directory: .
         run: |
           set -euo pipefail
           endpoint=$(doctl registry get --format Endpoint --no-header)
-          emulator="$endpoint/${{ env.EMULATOR_IMAGE }}"
-          mosquitto="$endpoint/${{ env.MOSQUITTO_IMAGE }}"
+          existing="$(doctl registry repository list --format Name --no-header 2>/dev/null | head -1 || true)"
+          repo_name="${existing:-$IMAGE_REPOSITORY}"
+          image="$endpoint/$repo_name"
+          echo "Using DOCR repository: $repo_name"
+          echo "TF_VAR_image_repository=$repo_name" >> "$GITHUB_ENV"
           docker buildx build --platform linux/amd64 \
             -f simulator/Dockerfile \
-            -t "${emulator}:latest" -t "${emulator}:${GITHUB_SHA}" \
+            -t "${image}:simulator" -t "${image}:simulator-${GITHUB_SHA}" \
             --push simulator
           docker buildx build --platform linux/amd64 \
             -f simulator/Dockerfile.mosquitto \
-            -t "${mosquitto}:latest" -t "${mosquitto}:${GITHUB_SHA}" \
+            -t "${image}:mosquitto" -t "${image}:mosquitto-${GITHUB_SHA}" \
             --push simulator
-          echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
-          echo "mosquitto=$mosquitto" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
 
       - name: Adopt existing app if needed
         run: |
@@ -167,7 +164,7 @@ jobs:
             echo "- registry: \`$(terraform output -raw registry_name)\`"
             echo "- broker: \`$(terraform output -raw broker_wss_url)\`"
             echo "- app: \`$(terraform output -raw app_url)\`"
-            echo "- images: \`${{ steps.image.outputs.emulator }}:latest\`, \`${{ steps.image.outputs.mosquitto }}:latest\`"
+            echo "- images: \`${{ steps.image.outputs.image }}:simulator\`, \`${{ steps.image.outputs.image }}:mosquitto\`"
             echo ""
             echo "Set repository variable \`MQTT_BROKER_URL\` to the broker URL for pages-dev."
           } >> "$GITHUB_STEP_SUMMARY"

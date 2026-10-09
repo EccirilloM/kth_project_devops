@@ -20,19 +20,19 @@ variable "registry_name" {
   default = "mqtt-emulator-dev"
 }
 
-variable "mosquitto_repository" {
+variable "image_repository" {
   type    = string
-  default = "mqtt-mosquitto"
+  default = "mqtt"
 }
 
-variable "simulator_repository" {
+variable "mosquitto_tag" {
   type    = string
-  default = "mqtt-emulator"
+  default = "mosquitto"
 }
 
-variable "image_tag" {
+variable "simulator_tag" {
   type    = string
-  default = "latest"
+  default = "simulator"
 }
 
 variable "simulator_password" {
@@ -129,8 +129,8 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        repository    = "${digitalocean_container_registry.mqtt.name}/${var.mosquitto_repository}"
-        tag           = var.image_tag
+        repository    = "${digitalocean_container_registry.mqtt.name}/${var.image_repository}"
+        tag           = var.mosquitto_tag
         deploy_on_push {
           enabled = true
         }
@@ -144,8 +144,8 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        repository    = "${digitalocean_container_registry.mqtt.name}/${var.simulator_repository}"
-        tag           = var.image_tag
+        repository    = "${digitalocean_container_registry.mqtt.name}/${var.image_repository}"
+        tag           = var.simulator_tag
         deploy_on_push {
           enabled = true
         }
@@ -222,9 +222,9 @@ output "registry_endpoint" {
 }
 
 output "simulator_image" {
-  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.simulator_repository}:${var.image_tag}"
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.simulator_tag}"
 }
 
 output "mosquitto_image" {
-  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.mosquitto_repository}:${var.image_tag}"
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.mosquitto_tag}"
 }
