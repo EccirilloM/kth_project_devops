@@ -27,15 +27,8 @@ jobs:
         with:
           name: frontend-checked-${{ github.sha }}
           path: FE/dist/sail-monitoring-web/browser/
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Verify that delivery reuses the tested files
@@ -66,15 +59,8 @@ jobs:
         with:
           name: frontend-checked-${{ github.sha }}
           path: FE/dist/sail-monitoring-web/browser/
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Supply public settings without rebuilding the frontend

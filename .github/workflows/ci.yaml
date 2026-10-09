@@ -24,15 +24,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh rhysd/actionlint:1.7.12 node:24-bookworm-slim
       # Also run locally before pushing: a workflow rejected by GitHub cannot run this step.
@@ -115,15 +108,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Build simulator checking tools
@@ -185,15 +171,8 @@ jobs:
         with:
           name: frontend-checked-${{ github.sha }}
           path: FE/dist/sail-monitoring-web/browser/
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh hashicorp/terraform:1.13.3 node:24-bookworm-slim nginx:1.28-alpine eclipse-mosquitto:2
       - name: Build runtime images from the checked frontend
@@ -257,15 +236,8 @@ jobs:
         with:
           name: frontend-checked-${{ github.sha }}
           path: FE/dist/sail-monitoring-web/browser/
-      - name: Log in to Docker Hub
-        if: >-
-          vars.DOCKERHUB_USERNAME != '' &&
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: ./.github/actions/dockerhub-login
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Configure public container image mirror
+        run: bash ci/configure-registry-mirror.sh
       - name: Download base images with bounded retries
         run: bash ci/pull-images.sh node:24-bookworm-slim hashicorp/terraform:1.13.3
       - name: Build test tooling without rebuilding the frontend

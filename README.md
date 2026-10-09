@@ -16,7 +16,7 @@ This README covers setup and verification. Architecture, design choices and limi
 | DigitalOcean App Platform and Container Registry (DOCR) | Host the persistent demo and distribute the exact container images verified in CI. |
 | Demo MQTT broker | Connect the browser and simulator for the shared demonstration. Use the deployed environment's `broker_wss_url` Terraform output; accounts and TLS are managed separately from frontend delivery. |
 | OpenStreetMap tile service | Supply the map background; requires internet access. |
-| Container registries and npm registry | Supply build images, dependencies and vulnerability advisory data for checks. |
+| Container registries, Google's public Docker Hub cache and npm registry | Supply build images, dependencies and vulnerability advisory data for checks. |
 
 An **external broker** means a service running separately from the frontend; it does not have to be a paid or managed cloud service. GitHub Pages serves static frontend files and cannot run the broker. The Terraform integration lab instead uses its own disposable Mosquitto container, without relying on the shared demo endpoint.
 
@@ -143,7 +143,6 @@ Configure the following GitHub Actions repository variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `DOCKERHUB_USERNAME` | Docker ID used for authenticated image downloads. Store its read-only access token separately as the repository secret `DOCKERHUB_TOKEN`. |
 | `DO_DEPLOY_ENABLED=true` | Enable DigitalOcean deployment after state migration and credential setup. |
 | `TF_STATE_MIGRATED=true` | Confirm the existing infrastructure state has been migrated and checked. |
 | `PAGES_DEPLOY_ENABLED=true` | Enable Pages deployment after successful integration. |
@@ -151,7 +150,9 @@ Configure the following GitHub Actions repository variables:
 
 Absent deployment flags disable cloud deployment; the laboratory and the delivery-candidate job on `main` still run. Set the Pages source to **GitHub Actions** and require CI checks and peer review through an active branch ruleset or branch protection. DigitalOcean additionally requires the backend settings and secrets in [infra/README.md](infra/README.md).
 
-Jobs that need Docker Hub log in before pulling images when `DOCKERHUB_USERNAME` is set. Login allows three attempts with pauses of 15 and 30 seconds; if all fail, the job fails. Fork pull requests and Dependabot runs use anonymous pulls, without this credential. Authentication uses the account's pull quota; it does not remove Docker Hub limits. Local Docker Desktop sign-in does not authenticate GitHub runners. Secret scanning pulls Gitleaks from GHCR and does not require Docker Hub login.
+Jobs using Docker Hub images configure the disposable GitHub runner to check [Google's public cache](https://cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images) at `mirror.gcr.io` first. Image names and versions stay unchanged, and no Google account or Docker Hub token is required. Docker falls back to Docker Hub if a cached image is unavailable, so registry outages and anonymous pull limits can still affect cache misses. Secret scanning pulls Gitleaks directly from GHCR.
+
+The mirror setup script restarts Docker only on GitHub-hosted Linux runners before containers start; do not run it on a development machine. Local commands use the existing Docker Desktop configuration. The earlier `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` settings are no longer used.
 
 Base images are downloaded before builds, with up to three attempts for recognized temporary registry/server errors and pauses of 15 and 30 seconds. Persistent failures still block the pipeline; authentication errors and pull-rate limits are not retried. Tests and Terraform operations are not automatically retried.
 
