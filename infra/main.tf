@@ -129,7 +129,7 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        repository    = "${digitalocean_container_registry.mqtt.name}/${var.image_repository}"
+        repository    = var.image_repository
         tag           = var.mosquitto_tag
         deploy_on_push {
           enabled = true
@@ -144,7 +144,7 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        repository    = "${digitalocean_container_registry.mqtt.name}/${var.image_repository}"
+        repository    = var.image_repository
         tag           = var.simulator_tag
         deploy_on_push {
           enabled = true
