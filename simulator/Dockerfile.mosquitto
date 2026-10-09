@@ -1,0 +1,8 @@
+FROM eclipse-mosquitto:2
+COPY mosquitto/mosquitto.conf /mosquitto/config/mosquitto.conf
+COPY mosquitto/acl /mosquitto/config/acl
+COPY mosquitto/entrypoint.sh /usr/local/bin/kth-broker-entrypoint
+RUN sed -i 's/\r$//' /usr/local/bin/kth-broker-entrypoint && chmod +x /usr/local/bin/kth-broker-entrypoint
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=12 \
+  CMD mosquitto_pub -h 127.0.0.1 -u simulator -P "$BROKER_SIMULATOR_PASSWORD" -t sail_gui/data/health -n || exit 1
+ENTRYPOINT ["/usr/local/bin/kth-broker-entrypoint"]

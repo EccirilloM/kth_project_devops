@@ -1,0 +1,179 @@
+name: CD
+
+on:
+  workflow_call:
+    inputs:
+      integration-passed:
+        description: Whether real MQTT integration and Terraform checks passed in the calling CI run
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  # Dev images are pushed to DOCR in the "dev" job (not GHCR).
+
+  delivery:
+    name: Package frontend delivery candidate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Verify that delivery reuses the tested files
+        run: >-
+          docker run --rm
+          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE,readonly"
+          --workdir /app/FE node:24-bookworm-slim
+          node scripts/artifact.mjs verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-delivery-candidate-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+          if-no-files-found: error
+          retention-days: 14
+
+  pages-package:
+    name: Prepare validated Pages artifact
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.PAGES_DEPLOY_ENABLED == 'true' && inputs.integration-passed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Supply public settings without rebuilding the frontend
+        env:
+          KTH_PUBLIC_CONFIG: ${{ vars.PAGES_PUBLIC_CONFIG_JSON }}
+        run: >-
+          docker run --rm --env KTH_PUBLIC_CONFIG
+          --mount "type=bind,source=${{ github.workspace }}/FE,target=/app/FE"
+          --workdir /app/FE node:24-bookworm-slim
+          node --experimental-transform-types --import ./tests/register.mjs
+          scripts/prepare-delivery.mjs --env
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: FE/dist/sail-monitoring-web/browser/
+
+  deploy:
+    name: Deploy validated frontend to GitHub Pages
+    needs: [pages-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy the uploaded artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  dev:
+    name: Deploy DigitalOcean App Platform (dev)
+    if: github.ref == 'refs/heads/dev' && vars.DO_DEPLOY_ENABLED == 'true' && inputs.integration-passed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    concurrency:
+      group: mqtt-dev-app
+      cancel-in-progress: false
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_STATE_MIGRATED: ${{ vars.TF_STATE_MIGRATED }}
+      TF_STATE_CONFIG_JSON: ${{ vars.TF_STATE_CONFIG_JSON }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
+      TF_VAR_region: ${{ vars.TF_REGION || 'ams' }}
+      TF_VAR_registry_name: ${{ vars.TF_REGISTRY_NAME || 'mqtt-emulator-dev' }}
+      TF_VAR_image_repository: ${{ vars.TF_IMAGE_REPOSITORY || 'mqtt' }}
+      TF_VAR_domain: ${{ vars.TF_DOMAIN }}
+      TF_VAR_zone: ${{ vars.TF_ZONE }}
+      TF_VAR_project_name: ${{ vars.TF_PROJECT_NAME }}
+      TF_VAR_guest_password: ${{ secrets.GUEST_PASSWORD }}
+      TF_VAR_operator_password: ${{ secrets.OPERATOR_PASSWORD }}
+      TF_VAR_simulator_password: ${{ secrets.SIMULATOR_PASSWORD }}
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require secure state and runtime credentials
+        working-directory: .
+        run: bash ci/deploy/preflight.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-image-${{ github.sha }}'
+          path: ${{ runner.temp }}/runtime-images
+      - name: Load only the images checked by this CI run
+        working-directory: .
+        run: |
+          for component in simulator broker frontend; do
+            bash ci/images.sh load "kth-devops-$component:$GITHUB_SHA" "$RUNNER_TEMP/runtime-images/$component-image-$GITHUB_SHA"
+          done
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.3
+          terraform_wrapper: false
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ env.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Initialize the migrated backend
+        run: |
+          terraform init -input=false -backend-config="$RUNNER_TEMP/backend.json"
+          terraform validate
+          # Never guess/import resources or create a second app after a missing-state restore.
+          terraform state list > "$RUNNER_TEMP/state-addresses.txt"
+          grep -qx 'digitalocean_container_registry.mqtt' "$RUNNER_TEMP/state-addresses.txt"
+          grep -qx 'digitalocean_app.mqtt' "$RUNNER_TEMP/state-addresses.txt"
+      - name: Authenticate to the existing registry
+        run: doctl registry login --expiry-seconds 1800
+      - name: Publish unique image versions
+        working-directory: .
+        run: bash ci/deploy/publish.sh
+      - name: Plan and update the application as one release
+        run: |
+          umask 077
+          terraform plan -input=false -out="$RUNNER_TEMP/deploy.tfplan"
+          terraform show -json "$RUNNER_TEMP/deploy.tfplan" > "$RUNNER_TEMP/deploy-plan.json"
+          bash ../ci/deploy/check-plan.sh "$RUNNER_TEMP/deploy-plan.json"
+          terraform apply -input=false "$RUNNER_TEMP/deploy.tfplan"
+      - name: Verify that the deployed frontend answers
+        run: bash ../ci/deploy/verify-release.sh
+      - name: Publish release references
+        run: |
+          {
+            echo '### DigitalOcean release'
+            printf '\nUI: %s\n' "$(terraform output -raw app_url)"
+            printf '\nBroker: %s\n' "$(terraform output -raw broker_wss_url)"
+            cat "$RUNNER_TEMP/release/images.env"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digitalocean-release-${{ github.sha }}
+          path: ${{ runner.temp }}/release/images.env
+          retention-days: 14
+          if-no-files-found: error
+      - name: Remove local registry authentication
+        if: always()
+        run: docker logout "registry.digitalocean.com"

@@ -1,0 +1,10 @@
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!Dockerfile
+!Dockerfile.mosquitto
+!mosquitto/
+!mosquitto/**

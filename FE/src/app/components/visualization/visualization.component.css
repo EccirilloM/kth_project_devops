@@ -1,0 +1,20 @@
+:host { display: block; min-width: 0; }
+.attitude { border: 1px solid #293246; border-radius: 1rem; background: #101722; overflow: hidden; }
+.attitude-heading { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem; border-bottom: 1px solid #293246; }
+h2 { font-weight: 600; }
+.attitude-heading p { color: #aab9cf; font-size: 0.85rem; }
+.views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+figure { min-width: 0; padding: 1rem; }
+figure + figure { border-left: 1px solid #293246; }
+figcaption { display: flex; justify-content: space-between; font-size: 0.85rem; color: #c7d5e6; }
+figcaption span { color: #8bdbff; }
+.canvas { position: relative; height: clamp(180px, 29vh, 340px); margin-top: 0.75rem; overflow: hidden; }
+.canvas img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; transform-origin: 50% 84%; transition: transform 150ms linear; }
+.water { position: absolute; inset: 84% 0 0; background: #7dd3fc12; }
+.horizon { position: absolute; top: 84%; width: 100%; height: 1px; background: #7dd3fc77; z-index: 2; }
+.angle { position: absolute; top: 0; right: 0; z-index: 3; padding: 0.2rem 0.5rem; border-radius: 0.4rem; background: #101722dd; font-variant-numeric: tabular-nums; }
+.unavailable { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #fbbf24; font-size: 0.9rem; }
+@media (max-width: 600px) {
+  .views { grid-template-columns: 1fr; }
+  figure + figure { border-left: 0; border-top: 1px solid #293246; }
+}

@@ -7,7 +7,7 @@ import { MqttService } from './core/services/mqtt.service';
 
 @Component({
   selector: 'app-root', imports: [RouterOutlet, HeaderComponent],
-  templateUrl: './app.component.html', styleUrls: ['./app.component.scss'],
+  templateUrl: './app.component.html', styleUrls: ['./app.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent {

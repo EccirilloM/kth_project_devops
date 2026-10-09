@@ -1,0 +1,20 @@
+name: kth-devops-runtime
+services:
+  frontend:
+    image: ${KTH_FRONTEND_IMAGE:-kth-devops-frontend:local}
+    build:
+      context: ../FE
+      dockerfile: Dockerfile.runtime
+    environment:
+      KTH_ALLOW_UNCONFIGURED: "true"
+  runtime-checks:
+    image: kth-devops-checks-checks:latest
+    init: true
+    shm_size: 1gb
+    environment:
+      KTH_SMOKE_BASE_URL: http://frontend/
+    volumes:
+      - ../FE/dist:/app/FE/dist:ro
+      - ../FE/test-results:/app/FE/test-results
+      - ../FE/playwright-report:/app/FE/playwright-report
+    command: ["npm", "run", "test:smoke"]

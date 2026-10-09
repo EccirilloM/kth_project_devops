@@ -1,0 +1,11 @@
+# Use together with compose.yaml for the remote demonstration broker.
+# Copy demo.config.example.json to .runtime/demo-config.json and confirm usernames.
+services:
+  web:
+    volumes:
+      - type: bind
+        source: ../.runtime/demo-config.json
+        target: /app/FE/src/assets/config.json
+        read_only: true
+        bind:
+          create_host_path: false

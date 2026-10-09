@@ -1,8 +1,8 @@
 import { AuthRoles } from '../../dtos/auth/auth-roles';
 
 // PUBLIC configuration: these values are shipped to every browser. No passwords here.
-export const APP_CONFIG = {
-  brokerUrl: 'wss://9b6cb923ef4f4f61975ac4342b2a3cbc.s1.eu.hivemq.cloud:8884/mqtt',
+export const DEFAULT_APP_CONFIG = {
+  brokerUrl: '',
   users: {
     guest: AuthRoles.Guest,
     Guest: AuthRoles.Guest,
@@ -13,13 +13,15 @@ export const APP_CONFIG = {
   connectTimeoutMs: 12000,
   reconnectMs: 5000,
   dataTimeoutMs: 5000,
-  diagnosticTimeoutMs: 15000,
   recordingTimeoutMs: 5000,
   commandTimeoutMs: 10000,
   maxPayloadBytes: 65536,
 };
 
-export type AppConfig = typeof APP_CONFIG;
+export type AppConfig = typeof DEFAULT_APP_CONFIG;
+
+// Populated once from public runtime configuration before Angular starts.
+export const APP_CONFIG: AppConfig = {...DEFAULT_APP_CONFIG, users: {...DEFAULT_APP_CONFIG.users}};
 
 // UI profiles only. The broker's ACLs must independently enforce every permission.
 export function roleForUsername(username: string, config: AppConfig): AuthRoles | null {

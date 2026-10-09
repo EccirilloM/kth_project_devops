@@ -5,11 +5,11 @@ import { APP_CONFIG } from '../../core/mqtt/app-config';
 
 @Component({
   selector: 'app-login', imports: [FormsModule],
-  templateUrl: './login.component.html', styleUrl: './login.component.scss',
+  templateUrl: './login.component.html', styleUrl: './login.component.css',
 })
 export class LoginComponent {
-  username = 'Guest';
-  password = 'Guest1234';
+  username = '';
+  password = '';
   errorMsg = '';
   isLoading = false;
   readonly configured = Boolean(APP_CONFIG.brokerUrl);

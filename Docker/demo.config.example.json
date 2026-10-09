@@ -1,0 +1,7 @@
+{
+  "brokerUrl": "wss://broker.example/mqtt",
+  "users": {
+    "guest": "GUEST",
+    "operator": "ADMIN"
+  }
+}

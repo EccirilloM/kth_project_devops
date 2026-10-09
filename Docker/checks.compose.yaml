@@ -1,0 +1,58 @@
+name: kth-devops-checks
+
+services:
+  infrastructure:
+    image: hashicorp/terraform:1.13.3
+    entrypoint: ["/bin/sh", "/verify-infra.sh"]
+    volumes:
+      - ../infra:/source:ro
+      - ../ci/verify-infra.sh:/verify-infra.sh:ro
+  # Explicit maintenance command: update the host lockfile without host Node or scripts.
+  dependencies:
+    profiles: [maintenance]
+    image: node:24-bookworm-slim
+    working_dir: /app/FE
+    volumes:
+      - ../FE:/app/FE
+    entrypoint: ["npm"]
+    command: ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]
+  workflows:
+    image: rhysd/actionlint:1.7.12
+    working_dir: /repo
+    network_mode: none
+    volumes:
+      - ..:/repo:ro
+    command: ["-color", ".github/workflows/ci.yaml", ".github/workflows/cd.yaml"]
+  checks:
+    build:
+      context: ..
+      dockerfile: Docker/frontend-checks/Dockerfile
+    init: true
+    shm_size: 1gb
+    volumes:
+      - ../FE/dist:/app/FE/dist
+      - ../FE/test-results:/app/FE/test-results
+      - ../FE/playwright-report:/app/FE/playwright-report
+  simulator-checks:
+    build:
+      context: ..
+      dockerfile: Docker/simulator-checks/Dockerfile
+    init: true
+    volumes:
+      - ../simulator/test-results:/app/simulator/test-results
+  simulator-image-test:
+    image: kth-devops-simulator:local
+    build:
+      context: ../simulator
+      dockerfile: Dockerfile
+    init: true
+    command: ["node", "--test", "test/model.test.mjs"]
+    volumes:
+      - ../simulator/test:/app/test:ro
+  secrets:
+    build:
+      context: ..
+      dockerfile: Docker/security/Dockerfile
+    volumes:
+      - ..:/repo:ro
+      - ../FE/test-results/secrets:/reports

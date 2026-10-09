@@ -1,75 +1,44 @@
-@if (sensorData$ | async; as sensorData) {
-  <div class="dashboard-grid">
-    <app-generic-sensor-card
-      class="dashboard-area-roll"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'ROLL'"
-      [value]="sensorData?.ROLL?.value ?? 0"
-      [unit]="sensorData?.ROLL?.unit ?? ''"
-      [failed]="sensorData?.ROLL?.failed ?? true"
-    ></app-generic-sensor-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-pitch"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'PITCH'"
-      [value]="sensorData?.PITCH?.value ?? 0"
-      [unit]="sensorData?.PITCH?.unit ?? ''"
-      [failed]="sensorData?.PITCH?.failed ?? true"
-    ></app-generic-sensor-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-sog"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'SOG'"
-      [value]="sensorData?.SOG?.value ?? 0"
-      [unit]="sensorData?.SOG?.unit ?? ''"
-      [failed]="sensorData?.SOG?.failed ?? true">
-    </app-generic-sensor-card>
-    
-    <app-yaw-card
-      class="dashboard-area-yaw"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'YAW'"
-      [value]="sensorData?.YAW?.value ?? 0"
-      [unit]="sensorData?.YAW?.unit ?? ''"
-      [failed]="sensorData?.YAW?.failed ?? true"
-    ></app-yaw-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-vmg"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'VMG'"
-      [value]="sensorData?.VMG?.value ?? 0"
-      [unit]="sensorData?.VMG?.unit ?? ''"
-      [failed]="sensorData?.VMG?.failed ?? true"
-    ></app-generic-sensor-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-twa"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'TWA'"
-      [value]="sensorData?.TWA?.value ?? 0"
-      [unit]="sensorData?.TWA?.unit ?? ''"
-      [failed]="sensorData?.TWA?.failed ?? true"
-    ></app-generic-sensor-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-twd"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'TWD'"
-      [value]="sensorData?.TWD?.value ?? 0"
-      [unit]="sensorData?.TWD?.unit ?? ''"
-      [failed]="sensorData?.TWD?.failed ?? true"
-    ></app-generic-sensor-card>
-    
-    <app-generic-sensor-card
-      class="dashboard-area-tws"
-      [cardClass]="'h-full min-h-0'"
-      [title]="'TWS'"
-      [value]="sensorData?.TWS?.value ?? 0"
-      [unit]="sensorData?.TWS?.unit ?? ''"
-      [failed]="sensorData?.TWS?.failed ?? true"
-    ></app-generic-sensor-card>
+<section class="dashboard-page" aria-labelledby="dashboard-title">
+  <div class="page-heading">
+    <div>
+      <h1 id="dashboard-title">Boat dashboard</h1>
+      <p>Orientation and ride height</p>
+    </div>
+    <p class="data-status" [class.live]="dashboard() !== null" role="status" data-testid="telemetry-status">
+      {{ dashboard() ? 'Live telemetry' : 'Waiting for fresh telemetry' }}
+    </p>
   </div>
-}
+
+  <div class="measurements">
+    @for (measurement of measurements; track measurement.key) {
+      <article class="measurement" [attr.aria-label]="measurement.label" [attr.data-testid]="measurement.key + '-card'">
+        <h2>{{ measurement.label }}</h2>
+        @if (dashboard(); as data) {
+          <p class="value"><span [attr.data-testid]="measurement.key + '-value'">{{ data[measurement.key] | number:'1.0-1' }}</span><span class="unit">°</span></p>
+        } @else {
+          <p class="unavailable">Data unavailable</p>
+        }
+        <p class="description">{{ measurement.description }}</p>
+      </article>
+    }
+  </div>
+
+  <app-visualization [dashboard]="dashboard()" [mechatronics]="mechatronics()" [indicators]="indicators()" />
+
+  @if (auth.isAdmin()) {
+    <section class="recording-panel" aria-labelledby="recording-title">
+      <div>
+        <h2 id="recording-title">Recording</h2>
+        <p role="status" data-testid="recording-status">
+          {{ !commands.recording() ? 'Waiting for fresh recording state' : commands.recording()?.recording ? 'Recording' : 'Stopped' }}
+        </p>
+        @if (commands.recording()?.bagName) { <p>{{ commands.recording()?.bagName }}</p> }
+        @if (commands.recording()?.lastError) { <p role="alert">{{ commands.recording()?.lastError }}</p> }
+      </div>
+      <div class="recording-actions">
+        <button type="button" (click)="startRecording()" [disabled]="!commands.canStart()">Start recording</button>
+        <button type="button" (click)="stopRecording()" [disabled]="!commands.canStop()">Stop recording</button>
+      </div>
+    </section>
+  }
+</section>

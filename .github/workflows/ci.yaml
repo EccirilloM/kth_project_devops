@@ -1,0 +1,276 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev, ettore, juozas]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A new commit must not interrupt Terraform or image publication on release branches.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}
+
+jobs:
+  quality:
+    name: Frontend quality and smoke tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Also run locally before pushing: a workflow rejected by GitHub cannot run this step.
+      - name: Validate GitHub Actions workflows
+        run: docker compose -f Docker/checks.compose.yaml run --rm workflows
+      - name: Build the Docker checks image
+        id: image
+        run: docker compose -f Docker/checks.compose.yaml build checks
+      - name: Lint, unit tests, TypeScript and production build
+        id: check
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run check
+      - name: Demonstrate the lint gate with a controlled violation
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run test:gates
+      - name: Audit all locked dependencies
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run audit
+      - name: Browser startup tests against the compiled artifact
+        if: ${{ !cancelled() && steps.check.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm checks npm run test:smoke
+      - name: Preserve frontend diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/
+            FE/playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Store the checked frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Clean up the checks project
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
+  secrets:
+    name: Secret scanning and gate demonstration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build the scanner image
+        id: image
+        run: docker compose -f Docker/checks.compose.yaml build secrets
+      - name: Demonstrate rejection of a nonfunctional test token
+        run: docker compose -f Docker/checks.compose.yaml run --rm secrets /opt/kth-devops/check-secret-gate.sh
+      - name: Scan reachable history and the current source
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: docker compose -f Docker/checks.compose.yaml run --rm secrets /opt/kth-devops/scan-secrets.sh
+      - name: Preserve redacted scanner reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-diagnostics-${{ github.sha }}
+          path: FE/test-results/secrets/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean up the scanner project
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
+  simulator:
+    name: Simulator checks and container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build simulator checking tools
+        run: docker compose -f Docker/checks.compose.yaml build simulator-checks
+      - name: Check TypeScript, simulator behavior and all dependencies
+        run: docker compose -f Docker/checks.compose.yaml run --rm simulator-checks
+      - name: Build the runtime image for an amd64 server
+        run: |
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$SIMULATOR_IMAGE" simulator
+      - name: Verify behavior in the final non-root runtime image
+        run: |
+          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{.Config.User}}')" = node
+          docker run --rm --network none \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/simulator/test,target=/app/test,readonly" \
+            "$SIMULATOR_IMAGE" node --test test/model.test.mjs
+      - name: Save the tested image without rebuilding it
+        run: |
+          mkdir -p "$RUNNER_TEMP/simulator-image"
+          docker image inspect "$SIMULATOR_IMAGE" --format '{{.Id}}' > "$RUNNER_TEMP/simulator-image/image.id"
+          docker save "$SIMULATOR_IMAGE" --output "$RUNNER_TEMP/simulator-image/image.tar"
+          cd "$RUNNER_TEMP/simulator-image"
+          sha256sum image.tar > image.sha256
+      - name: Store the tested simulator image
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-image-${{ github.sha }}
+          path: ${{ runner.temp }}/simulator-image/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Preserve simulator check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-diagnostics-${{ github.sha }}
+          path: simulator/test-results/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean up simulator checking tools
+        if: always()
+        run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
+
+  runtime:
+    name: Runtime frontend and broker images
+    needs: [quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      KTH_FRONTEND_IMAGE: kth-devops-frontend:${{ github.sha }}
+      KTH_BROKER_IMAGE: kth-devops-broker:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Build runtime images from the checked frontend
+        run: |
+          docker compose -f Docker/checks.compose.yaml run --rm infrastructure
+          docker compose -f Docker/checks.compose.yaml build checks
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f FE/Dockerfile.runtime -t "$KTH_FRONTEND_IMAGE" FE
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f simulator/Dockerfile.mosquitto -t "$KTH_BROKER_IMAGE" simulator
+      - name: Check the actual Nginx runtime and compiled file identity
+        run: |
+          docker compose -f Docker/runtime.compose.yaml up -d --wait --wait-timeout 120 frontend
+          docker compose -f Docker/runtime.compose.yaml run --rm runtime-checks
+      - name: Save the runtime images
+        run: |
+          bash ci/images.sh save "$KTH_FRONTEND_IMAGE" "$RUNNER_TEMP/frontend-image"
+          bash ci/images.sh save "$KTH_BROKER_IMAGE" "$RUNNER_TEMP/broker-image"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-image-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-image/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: broker-image-${{ github.sha }}
+          path: ${{ runner.temp }}/broker-image/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Preserve runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/
+            FE/playwright-report/
+          retention-days: 7
+      - name: Stop runtime checks
+        if: always()
+        run: docker compose -f Docker/runtime.compose.yaml down --remove-orphans
+
+  integration:
+    name: Real MQTT integration and Terraform idempotence
+    needs: [quality, secrets, simulator, runtime]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KTH_ENVIRONMENT_ID: kth-devops-it-${{ github.run_id }}-${{ github.run_attempt }}
+      KTH_FRONTEND_IMAGE: kth-devops-frontend:${{ github.sha }}
+      KTH_BROKER_IMAGE: kth-devops-broker:${{ github.sha }}
+      KTH_SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Build test tooling without rebuilding the frontend
+        run: docker compose -f Docker/checks.compose.yaml build checks
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-image-${{ github.sha }}'
+          path: ${{ runner.temp }}/runtime-images
+      - name: Load the exact images produced by CI
+        run: |
+          bash ci/images.sh load "$KTH_FRONTEND_IMAGE" "$RUNNER_TEMP/runtime-images/frontend-image-$GITHUB_SHA"
+          bash ci/images.sh load "$KTH_BROKER_IMAGE" "$RUNNER_TEMP/runtime-images/broker-image-$GITHUB_SHA"
+          bash ci/images.sh load "$KTH_SIMULATOR_IMAGE" "$RUNNER_TEMP/runtime-images/simulator-image-$GITHUB_SHA"
+      - name: Validate and provision the disposable Terraform laboratory
+        id: provision
+        run: bash ci/lab/run.sh up
+      - name: Check no-change plans before and after a second apply
+        run: bash ci/lab/run.sh idempotence
+      - name: Test the real WSS broker and browser
+        run: bash ci/lab/run.sh test
+      - name: Collect sanitized laboratory logs
+        if: ${{ always() && steps.provision.outcome != 'skipped' }}
+        run: bash ci/lab/run.sh logs
+      - name: Preserve laboratory evidence before teardown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/integration/
+            FE/test-results/lab-diagnostics/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Destroy only this laboratory, also after failures
+        if: ${{ always() && steps.provision.outcome != 'skipped' }}
+        run: bash ci/lab/run.sh down
+
+  cd:
+    name: Publish verified artifacts
+    needs: [quality, secrets, simulator, runtime, integration]
+    if: >-
+      always() && !cancelled() && github.event_name == 'push' &&
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') &&
+      needs.quality.result == 'success' && needs.secrets.result == 'success' &&
+      needs.simulator.result == 'success' &&
+      needs.runtime.result == 'success' && needs.integration.result == 'success'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/cd.yaml
+    with:
+      integration-passed: ${{ needs.integration.result == 'success' }}
+    secrets: inherit

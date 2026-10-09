@@ -18,7 +18,7 @@ test('relative TypeScript imports and Angular templates resolve on case-sensitiv
       assert.ok(existsSync(dependency), `${relative(root,file)} imports missing ${match[1]}`);
       assert.ok(caseCorrect(dependency), `${relative(root,file)}: filename case mismatch for ${match[1]}`);
     }
-    for (const match of source.matchAll(/['"](\.\/[^'"]+\.(?:html|scss))['"]/g)) {
+    for (const match of source.matchAll(/['"](\.\/[^'"]+\.(?:html|css))['"]/g)) {
       assert.ok(existsSync(resolve(dirname(file), match[1])), `${file}: missing template/style ${match[1]}`);
     }
   }
@@ -30,10 +30,10 @@ test('the standalone app contains no old login API, JWT or backend WebSocket con
   }
 });
 test('local image assets and the favicon are present in the Angular build inputs', () => {
-  assert.doesNotMatch(readFileSync(join(root, 'src/styles.scss'), 'utf8'), /url\(['"]?\/assets\//);
+  assert.doesNotMatch(readFileSync(join(root, 'src/styles.css'), 'utf8'), /url\(['"]?\/assets\//);
   const config = JSON.parse(readFileSync(join(root, 'angular.json'),'utf8'));
   for (const item of config.projects.FE.architect.build.options.assets) assert.ok(existsSync(join(root,item)), item);
-  for (const file of files(join(root, 'src')).filter(file => /\.(ts|html|scss)$/.test(file))) {
+  for (const file of files(join(root, 'src')).filter(file => /\.(ts|html|css)$/.test(file))) {
     for (const match of readFileSync(file,'utf8').matchAll(/['"](assets\/[^'"\s]+)['"]/g)) {
       assert.ok(existsSync(join(root, 'src', match[1])), `${relative(root,file)} references ${match[1]}`);
     }

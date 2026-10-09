@@ -1,0 +1,25 @@
+:host { display: block; min-width: 0; }
+.dashboard-page { display: grid; gap: 1rem; max-width: 1440px; margin: 0 auto; padding: 0.5rem 0; }
+.page-heading { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem; }
+h1 { font-size: 1.5rem; font-weight: 700; }
+.page-heading p, .description, .recording-panel p { color: #aab9cf; font-size: 0.9rem; }
+.page-heading .data-status { color: #fbbf24; }
+.page-heading .data-status.live { color: #86efac; }
+.measurements { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.measurement { min-width: 0; padding: 1rem 1.25rem; border: 1px solid #293246; border-radius: 1rem; background: #101722; }
+.measurement h2 { color: #b7c9e2; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; }
+.value { font-size: clamp(2rem, 5vw, 4rem); font-weight: 600; font-variant-numeric: tabular-nums; }
+.unit { color: #7dd3fc; padding-left: 0.15rem; }
+.unavailable { color: #fbbf24; padding: 1rem 0; }
+.recording-panel { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; background: #101722; border: 1px solid #293246; border-radius: 1rem; }
+.recording-panel h2 { font-weight: 600; }
+.recording-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+button { border: 1px solid #48647f; padding: 0.65rem 1rem; border-radius: 0.5rem; background: #20354b; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid #8bdbff; outline-offset: 3px; }
+@media (max-width: 520px) {
+  .measurements { gap: 0.5rem; }
+  .measurement { padding: 0.75rem 0.5rem; }
+  .description { font-size: 0.75rem; }
+  .unavailable { font-size: 0.8rem; }
+}

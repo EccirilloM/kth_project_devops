@@ -1,0 +1,10 @@
+{
+  "brokerUrl": "",
+  "users": {
+    "guest": "GUEST",
+    "Guest": "GUEST",
+    "operator": "ADMIN",
+    "Staff": "ADMIN",
+    "staff": "ADMIN"
+  }
+}

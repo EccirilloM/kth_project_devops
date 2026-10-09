@@ -1,0 +1,8 @@
+**
+!Dockerfile.runtime
+!nginx.default.conf
+!docker-entrypoint.sh
+!dist/
+!dist/sail-monitoring-web/
+!dist/sail-monitoring-web/browser/
+!dist/sail-monitoring-web/browser/**

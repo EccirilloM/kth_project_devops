@@ -1,10 +1,11 @@
-name: sail-monitoring-dev
+# Compose prefixes containers, images, networks and volumes with this course name.
+name: kth-devops-dev
 
 services:
   web:
     build:
       context: ..
-      dockerfile: Docker/Dockerfile
+      dockerfile: Docker/dev/Dockerfile
     init: true
     ports:
       - "127.0.0.1:4200:4200"
@@ -16,7 +17,7 @@ services:
       - npm_cache:/root/.npm
     healthcheck:
       # Ready means dependencies are installed; Angular is started manually.
-      test: ["CMD", "test", "-f", "/tmp/sail-dev-ready"]
+      test: ["CMD", "test", "-f", "/tmp/kth-devops-ready"]
       interval: 5s
       timeout: 5s
       start_period: 180s

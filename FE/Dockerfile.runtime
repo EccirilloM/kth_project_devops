@@ -1,0 +1,11 @@
+FROM nginx:1.28-alpine
+RUN apk add --no-cache jq
+COPY nginx.default.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.sh /usr/local/bin/kth-frontend-entrypoint
+RUN sed -i 's/\r$//' /usr/local/bin/kth-frontend-entrypoint && chmod +x /usr/local/bin/kth-frontend-entrypoint \
+    && rm -rf /usr/share/nginx/html/*
+COPY dist/sail-monitoring-web/browser/ /usr/share/nginx/html/
+EXPOSE 80
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=12 \
+  CMD wget -q -O /dev/null http://127.0.0.1/assets/config.json || exit 1
+ENTRYPOINT ["/usr/local/bin/kth-frontend-entrypoint"]

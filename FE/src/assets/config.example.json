@@ -1,0 +1,10 @@
+{
+  "brokerUrl": "wss://broker.example/mqtt",
+  "users": {
+    "guest": "GUEST",
+    "operator": "ADMIN"
+  },
+  "dataTimeoutMs": 5000,
+  "recordingTimeoutMs": 5000,
+  "reconnectMs": 5000
+}

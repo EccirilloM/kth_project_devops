@@ -1,93 +1,20 @@
-<header class="bg-[#1a1b24] py-2 px-4 rounded-md shadow flex items-center justify-between relative">
-    <div class="flex items-center gap-2 min-w-0">
-        <img src="assets/logos/polimisailing.png" alt="Polimi Sailing Team" class="w-12 h-12 sm:w-[70px] sm:h-[70px] shrink-0" />
-        <h1 class="text-white text-sm sm:text-base font-semibold bg-clip-text">
-            POLIMI Sailing Team
-        </h1>
-    </div>
-
-    <div class="flex items-center gap-3 xl:gap-6">
-        <nav aria-label="Navigazione principale" class="hidden xl:flex gap-6 items-center justify-center pr-4">
-            <ng-container [ngTemplateOutlet]="mqttBadge" />
-            <a routerLink="/dashboard" class="nav-link" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                <span class="material-icons text-3xl">dashboard</span>
-                <span class="text-sm">Dashboard</span>
-            </a>
-
-            @if(isAdmin()) {
-                <a routerLink="/map" class="nav-link px-4 py-2" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                    <span class="material-icons text-3xl">map</span>
-                    <span class="text-sm">Map</span>
-                </a>
-
-                <a routerLink="/mechatron" class="nav-link" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                    <span class="material-icons text-3xl">precision_manufacturing</span>
-                    <span class="text-sm">Mechatron</span>
-                </a>
-
-                <a routerLink="/settings" class="nav-link" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                    <span class="material-icons text-3xl">settings</span>
-                    <span class="text-sm">Settings</span>
-                </a>
-                <a routerLink="/diagnostics" class="nav-link" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                    <span class="material-icons text-3xl" aria-hidden="true">monitor_heart</span>
-                    <span class="text-sm">Diagnostics</span>
-                </a>
-            }
-
-            <a routerLink="/visualization" class="nav-link" routerLinkActive="nav-link-active" [routerLinkActiveOptions]="{ exact: true }">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                </svg>
-                <span class="text-sm">Visualization</span>
-            </a>
-        </nav>
-
-        <div class="xl:hidden"><ng-container [ngTemplateOutlet]="mqttBadge" /></div>
-        <button type="button" aria-label="Apri o chiudi menu" [attr.aria-expanded]="showMobileMenu" (click)="toggleMobileMenu()" class="xl:hidden flex items-center hover:text-blue-400">
-            <span class="material-icons text-3xl">menu</span>
-        </button>
-
-
-        <button type="button" class="nav-link" (click)="logout.emit()">
-            <span class="material-icons text-3xl">logout</span>
-            <span class="text-sm hidden sm:inline">Logout</span>
-        </button>
-    </div>
-
-    @if(showMobileMenu) {
-        <nav aria-label="Menu mobile" class="absolute top-full mt-2 right-4 w-64 xl:hidden bg-[#1a1b24] border border-gray-700 rounded-md shadow-2xl flex flex-col gap-1 p-2 z-50">
-            <a routerLink="/dashboard" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                <span class="material-icons">dashboard</span> Dashboard
-            </a>
-
-            @if(isAdmin()) {
-                <a routerLink="/map" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                    <span class="material-icons">map</span> Map
-                </a>
-                <a routerLink="/mechatron" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                    <span class="material-icons">precision_manufacturing</span> Mechatron
-                </a>
-                <a routerLink="/settings" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                    <span class="material-icons">settings</span> Settings
-                </a>
-                <a routerLink="/diagnostics" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                    <span class="material-icons" aria-hidden="true">monitor_heart</span> Diagnostics
-                </a>
-            }
-
-            <a routerLink="/visualization" (click)="showMobileMenu = false" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-700 rounded text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                </svg>
-                Visualization
-            </a>
-        </nav>
+<header class="app-header">
+  <a routerLink="/dashboard" class="brand" aria-label="Sailing dashboard">
+    <img src="assets/logos/polimisailing.png" alt="Polimi Sailing Team" />
+    <span>Sailing monitor</span>
+  </a>
+  <nav aria-label="Main navigation">
+    <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">Dashboard</a>
+    @if (isAdmin()) {
+      <a routerLink="/map" routerLinkActive="active" ariaCurrentWhenActive="page">Map</a>
     }
+  </nav>
+  <div class="session">
+    <span class="connection" [class.connected]="connected()" role="status" data-testid="connection-status">
+      <span class="status-dot" aria-hidden="true"></span>
+      MQTT: {{ connection().status }}
+    </span>
+    <span class="role">{{ isAdmin() ? 'Operator' : 'Guest' }}</span>
+    <button type="button" (click)="logout.emit()">Log out</button>
+  </div>
 </header>
-
-<ng-template #mqttBadge>
-    <span class="mqtt-badge" [class.mqtt-connected]="!mqttNotConnected()" role="status"
-        [attr.aria-label]="mqttNotConnected() ? 'MQTT: non connesso al broker' : 'MQTT: connesso al broker'"
-        [title]="mqttNotConnected() ? 'Broker non connesso' : 'Broker connesso; la disponibilità dei sensori è separata'">MQTT</span>
-</ng-template>

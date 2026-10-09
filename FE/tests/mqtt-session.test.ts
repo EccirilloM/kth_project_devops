@@ -10,7 +10,6 @@ import { ClientCommandFactory as commands } from '../src/app/dtos/commands/Clien
 import { IndicatorType } from '../src/app/dtos/indicator/IndicatorType';
 import { MethodType } from '../src/app/dtos/indicator/MethodType';
 import { MqttConnectionState } from '../src/app/dtos/mqtt/Mqtt.connection.model';
-import { diagnosticSample } from './diagnostic-sample';
 
 class FakeClient extends EventEmitter {
   connected = false;
@@ -234,42 +233,13 @@ test('indicator commands obey fresh boat capability flags and use unqueued QoS 0
   assert.equal(client.published.length, 1);
 });
 
-test('only Staff subscribes to and receives diagnostics; switching to Guest clears them', async t => {
+test('the simplified UI requests only its telemetry and operator recording topics', async t => {
   const {session, login} = setup(t);
-  const diagnostic = () => session.diagnostic$.value;
   const staff = await login('Staff');
-  assert.ok(staff.subscriptions.includes('sail_gui/data/diagnostics'));
-  assert.equal(staff.subscriptions.includes('sail_gui/data/diagnostic'), false);
-  staff.message('sail_gui/data/diagnostic', diagnosticSample);
-  assert.equal(diagnostic(), null);
-  staff.message('sail_gui/data/diagnostics', diagnosticSample);
-  assert.equal(diagnostic()?.raspberry.cpu_usage_percent, 0);
-  assert.equal(diagnostic()?.raspberry.memory_usage_percent, 25);
-  session.logout();
-  assert.equal(session.diagnostic$.value, null);
-  const guest = await login('Guest');
-  assert.equal(guest.subscriptions.includes(TOPICS.diagnostic), false);
-  guest.message(TOPICS.diagnostic, diagnosticSample);
-  assert.equal(session.diagnostic$.value, null);
-});
-
-test('diagnostics ignore retained/malformed messages, expire independently, and clear on outage', async t => {
-  const {session, login} = setup(t);
-  // Each MQTT event can change the value; don't carry assertion narrowing across events.
-  const diagnostic = () => session.diagnostic$.value;
-  const client = await login('Staff');
-  client.message(TOPICS.diagnostic, diagnosticSample, true);
-  assert.equal(diagnostic(), null);
-  client.message(TOPICS.diagnostic, diagnosticSample);
-  t.mock.timers.tick(APP_CONFIG.dataTimeoutMs + 500);
-  assert.equal(diagnostic()?.raspberry?.temperature_c, 48);
-  client.message(TOPICS.diagnostic, {...diagnosticSample, temperature: 'bad'});
-  t.mock.timers.tick(APP_CONFIG.diagnosticTimeoutMs - APP_CONFIG.dataTimeoutMs);
-  assert.equal(diagnostic(), null);
-  client.message(TOPICS.diagnostic, diagnosticSample);
-  assert.ok(diagnostic());
-  client.connected = false;
-  client.emit('close');
-  assert.equal(diagnostic(), null);
-  assert.equal(session.feedback$.value, '');
+  assert.deepEqual([...staff.subscriptions].sort(), [TOPICS.dashboard, TOPICS.mechatronics,
+    TOPICS.indicators, TOPICS.map, TOPICS.recording, TOPICS.startResponse, TOPICS.stopResponse].sort());
+  staff.message('sail_gui/data/diagnostics', {device_id: 'unused'});
+  assert.equal(session.fresh('sail_gui/data/diagnostics'), false);
+  const guest = await login('guest');
+  assert.deepEqual([...guest.subscriptions].sort(), [TOPICS.dashboard, TOPICS.mechatronics, TOPICS.indicators].sort());
 });

@@ -1,0 +1,11 @@
+:host { display: block; height: 100%; min-height: 420px; min-width: 0; }
+.map-page { display: flex; flex-direction: column; gap: 0.75rem; height: 100%; padding: 0.5rem 0; }
+.map-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; }
+h1 { font-size: 1.5rem; font-weight: 700; }
+.map-heading p, .map-note { color: #aab9cf; font-size: 0.85rem; }
+.position-status { color: #fbbf24; font-size: 0.85rem; }
+.position-status.live { color: #86efac; }
+.boat-map { flex: 1; min-height: 280px; border: 1px solid #293246; border-radius: 1rem; isolation: isolate; z-index: 0; }
+button { border: 1px solid #48647f; padding: 0.65rem 1rem; border-radius: 0.5rem; background: #20354b; }
+button:hover { background: #294560; }
+button:focus-visible { outline: 2px solid #8bdbff; outline-offset: 3px; }

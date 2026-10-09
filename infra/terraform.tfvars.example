@@ -1,0 +1,9 @@
+# Optional public values for the persistent demo; preserve existing resource identities.
+# CI uses repository variables. See infra/README.md for runtime secrets and state migration.
+# Supply the three image digests and passwords at runtime, not in a tracked file.
+
+#region = "ams"
+#registry_name = "mqtt-emulator-dev"
+#domain = "mqtt-dev.example.com"
+#zone = "example.com"
+#project_name = "mqtt-emulator-dev"

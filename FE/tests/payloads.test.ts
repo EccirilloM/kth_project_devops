@@ -10,11 +10,11 @@ import { TOPICS } from '../src/app/core/mqtt/topics';
 
 const stamp = {sec: 123, nanosec: 0};
 test('ROS numeric buoy codes map to labels and back without swapping committee and pin', () => {
-  const raw = {stamp, lat: 45, lon: 10, yaw: 15, twd: 20, tws: 8, ttl: -1, dtl: 12,
+  const raw = {stamp, lat: 45, lon: 10, yaw: 15,
     marks: [{type: 0, lat: 45, lon: 10}, {type: 1, lat: 46, lon: 11}, {type: 2, lat: 47, lon: 12}, {type: 99}, null]};
   const data = mapPayload(raw);
   assert.deepEqual(data.marks.map(mark => mark.type), [MarkType.COMITATO, MarkType.PIN, MarkType.BOLINA]);
-  assert.equal(data.ttl, -1);
+  assert.equal(data.yaw, 15);
   data.marks.forEach((mark, i) => assert.deepEqual(commandPayload(commands.setMark(mark)), {
     topic: TOPICS.setMark, payload: {type: i, lat: mark.lat, lon: mark.lon},
   }));
@@ -52,10 +52,20 @@ test('indicator and servo commands retain the ROS gateway wire contract', () => 
   });
 });
 test('telemetry rejects nonnumeric samples rather than presenting fabricated zero values', () => {
-  const dashboard = {stamp, roll: 1, pitch: 2, yaw: 3, sog: 4, vmg: 5, twa: 6, twd: 7, tws: 8};
+  const dashboard = {stamp, roll: 1, pitch: 2, yaw: 3};
   assert.deepEqual(dashboardPayload(dashboard), dashboard);
-  assert.throws(() => dashboardPayload({...dashboard, sog: null}));
+  assert.throws(() => dashboardPayload({...dashboard, roll: null}));
   assert.throws(() => dashboardPayload({...dashboard, yaw: Infinity}));
   assert.throws(() => dashboardPayload({...dashboard, stamp: undefined}));
   assert.throws(() => mechatronicsPayload({stamp, kp: 1}));
+});
+
+test('reduced height payloads work and original telemetry may still contain extra fields', () => {
+  const heights = {stamp, current_height_est_wand: 0.2, current_height_est_ultrasound: 0.3};
+  assert.deepEqual(mechatronicsPayload(heights), heights);
+  assert.throws(() => mechatronicsPayload({...heights, current_height_est_wand: null}));
+  assert.throws(() => mechatronicsPayload({...heights, current_height_est_ultrasound: Infinity}));
+  assert.equal(dashboardPayload({stamp, roll: 1, pitch: 2, yaw: 3, sog: 4, tws: 8}).yaw, 3);
+  assert.equal(mechatronicsPayload({...heights, kp: 1, servo_limit_max: 45}).current_height_est_wand, 0.2);
+  assert.equal(mapPayload({stamp, lat: 45, lon: 10, yaw: 15, twd: 20, ttl: -1, marks: []}).lat, 45);
 });
