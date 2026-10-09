@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A new commit must not interrupt Terraform or image publication on release branches.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}
 
 jobs:
   quality:
@@ -144,14 +145,75 @@ jobs:
         if: always()
         run: docker compose -f Docker/checks.compose.yaml down --remove-orphans
 
+  runtime:
+    name: Runtime frontend and broker images
+    needs: [quality]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      KTH_FRONTEND_IMAGE: kth-devops-frontend:${{ github.sha }}
+      KTH_BROKER_IMAGE: kth-devops-broker:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-checked-${{ github.sha }}
+          path: FE/dist/sail-monitoring-web/browser/
+      - name: Build runtime images from the checked frontend
+        run: |
+          docker compose -f Docker/checks.compose.yaml run --rm infrastructure
+          docker compose -f Docker/checks.compose.yaml build checks
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f FE/Dockerfile.runtime -t "$KTH_FRONTEND_IMAGE" FE
+          docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f simulator/Dockerfile.mosquitto -t "$KTH_BROKER_IMAGE" simulator
+      - name: Check the actual Nginx runtime and compiled file identity
+        run: |
+          docker compose -f Docker/runtime.compose.yaml up -d --wait --wait-timeout 120 frontend
+          docker compose -f Docker/runtime.compose.yaml run --rm runtime-checks
+      - name: Save the runtime images
+        run: |
+          bash ci/images.sh save "$KTH_FRONTEND_IMAGE" "$RUNNER_TEMP/frontend-image"
+          bash ci/images.sh save "$KTH_BROKER_IMAGE" "$RUNNER_TEMP/broker-image"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-image-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-image/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: broker-image-${{ github.sha }}
+          path: ${{ runner.temp }}/broker-image/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Preserve runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-diagnostics-${{ github.sha }}
+          path: |
+            FE/test-results/
+            FE/playwright-report/
+          retention-days: 7
+      - name: Stop runtime checks
+        if: always()
+        run: docker compose -f Docker/runtime.compose.yaml down --remove-orphans
+
   integration:
     name: Real MQTT integration and Terraform idempotence
-    needs: [quality, secrets, simulator]
-    if: vars.LAB_INTEGRATION_ENABLED == 'true'
+    needs: [quality, secrets, simulator, runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       KTH_ENVIRONMENT_ID: kth-devops-it-${{ github.run_id }}-${{ github.run_attempt }}
+      KTH_FRONTEND_IMAGE: kth-devops-frontend:${{ github.sha }}
+      KTH_BROKER_IMAGE: kth-devops-broker:${{ github.sha }}
+      KTH_SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -162,6 +224,15 @@ jobs:
           path: FE/dist/sail-monitoring-web/browser/
       - name: Build test tooling without rebuilding the frontend
         run: docker compose -f Docker/checks.compose.yaml build checks
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-image-${{ github.sha }}'
+          path: ${{ runner.temp }}/runtime-images
+      - name: Load the exact images produced by CI
+        run: |
+          bash ci/images.sh load "$KTH_FRONTEND_IMAGE" "$RUNNER_TEMP/runtime-images/frontend-image-$GITHUB_SHA"
+          bash ci/images.sh load "$KTH_BROKER_IMAGE" "$RUNNER_TEMP/runtime-images/broker-image-$GITHUB_SHA"
+          bash ci/images.sh load "$KTH_SIMULATOR_IMAGE" "$RUNNER_TEMP/runtime-images/simulator-image-$GITHUB_SHA"
       - name: Validate and provision the disposable Terraform laboratory
         id: provision
         run: bash ci/lab/run.sh up
@@ -188,13 +259,13 @@ jobs:
 
   cd:
     name: Publish verified artifacts
-    needs: [quality, secrets, simulator, integration]
+    needs: [quality, secrets, simulator, runtime, integration]
     if: >-
       always() && !cancelled() && github.event_name == 'push' &&
       (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') &&
       needs.quality.result == 'success' && needs.secrets.result == 'success' &&
       needs.simulator.result == 'success' &&
-      (needs.integration.result == 'success' || needs.integration.result == 'skipped')
+      needs.runtime.result == 'success' && needs.integration.result == 'success'
     permissions:
       contents: read
       pages: write

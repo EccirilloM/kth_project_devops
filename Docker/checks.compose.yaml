@@ -1,6 +1,12 @@
 name: kth-devops-checks
 
 services:
+  infrastructure:
+    image: hashicorp/terraform:1.13.3
+    entrypoint: ["/bin/sh", "/verify-infra.sh"]
+    volumes:
+      - ../infra:/source:ro
+      - ../ci/verify-infra.sh:/verify-infra.sh:ro
   # Explicit maintenance command: update the host lockfile without host Node or scripts.
   dependencies:
     profiles: [maintenance]

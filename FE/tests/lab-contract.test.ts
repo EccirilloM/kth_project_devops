@@ -1,5 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {parseLab} from '../scripts/lab-contract';
 const id = 'kth-devops-it-test';
 const fixture = () => ({schemaVersion: 1, disposable: true, environmentId: id,
@@ -16,4 +20,24 @@ test('laboratory contract accepts separate ephemeral identities and rejects cros
     assert.throws(() => parseLab({...fixture(), ...patch}, id));
   }
   assert.throws(() => parseLab(fixture(), ''));
+});
+
+test('Playwright loads the real integration configuration and discovers tests without a broker', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kth-devops-discovery-'));
+  const manifest = join(directory, 'manifest.json');
+  try {
+    writeFileSync(manifest, JSON.stringify(fixture()));
+    // --list exercises Playwright's module loader without starting browsers or MQTT connections.
+    const result = spawnSync(process.execPath, [
+      'node_modules/@playwright/test/cli.js', 'test', '--list', '--config', 'playwright.integration.config.ts',
+    ], {
+      encoding: 'utf8', timeout: 20000,
+      env: {...process.env, KTH_LAB_MANIFEST: manifest, KTH_EXPECTED_ENVIRONMENT: id},
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /Total: [1-9]\d* tests? in/);
+  } finally {
+    rmSync(directory, {recursive: true, force: true});
+  }
 });

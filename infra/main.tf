@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.13, < 2"
   required_providers {
     digitalocean = {
       source  = "digitalocean/digitalocean"
@@ -25,25 +25,55 @@ variable "image_repository" {
   default = "mqtt"
 }
 
-variable "mosquitto_tag" {
-  type    = string
-  default = "mosquitto"
+variable "mosquitto_digest" {
+  type = string
+  validation {
+    condition     = can(regex("^sha256:[a-f0-9]{64}$", var.mosquitto_digest))
+    error_message = "Supply the digest of the verified image."
+  }
 }
 
-variable "simulator_tag" {
-  type    = string
-  default = "simulator"
+variable "simulator_digest" {
+  type = string
+  validation {
+    condition     = can(regex("^sha256:[a-f0-9]{64}$", var.simulator_digest))
+    error_message = "Supply the digest of the verified image."
+  }
 }
 
-variable "frontend_tag" {
-  type    = string
-  default = "frontend"
+variable "frontend_digest" {
+  type = string
+  validation {
+    condition     = can(regex("^sha256:[a-f0-9]{64}$", var.frontend_digest))
+    error_message = "Supply the digest of the verified image."
+  }
+}
+
+variable "guest_password" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{24,128}$", var.guest_password))
+    error_message = "Use 24..128 URL-safe characters for broker passwords."
+  }
+}
+
+variable "operator_password" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{24,128}$", var.operator_password))
+    error_message = "Use 24..128 URL-safe characters for broker passwords."
+  }
 }
 
 variable "simulator_password" {
   type      = string
-  default   = "simulatorpass"
   sensitive = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{24,128}$", var.simulator_password))
+    error_message = "Use 24..128 URL-safe characters for broker passwords."
+  }
 }
 
 variable "instance_size" {
@@ -146,10 +176,7 @@ resource "digitalocean_app" "mqtt" {
         registry_type = "DOCR"
         registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
-        tag           = var.frontend_tag
-        deploy_on_push {
-          enabled = true
-        }
+        digest        = var.frontend_digest
       }
 
       env {
@@ -173,14 +200,27 @@ resource "digitalocean_app" "mqtt" {
       http_port          = 9001
       internal_ports     = [1883]
 
+      env {
+        key   = "BROKER_GUEST_PASSWORD"
+        value = var.guest_password
+        type  = "SECRET"
+      }
+      env {
+        key   = "BROKER_OPERATOR_PASSWORD"
+        value = var.operator_password
+        type  = "SECRET"
+      }
+      env {
+        key   = "BROKER_SIMULATOR_PASSWORD"
+        value = var.simulator_password
+        type  = "SECRET"
+      }
+
       image {
         registry_type = "DOCR"
         registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
-        tag           = var.mosquitto_tag
-        deploy_on_push {
-          enabled = true
-        }
+        digest        = var.mosquitto_digest
       }
     }
 
@@ -193,10 +233,7 @@ resource "digitalocean_app" "mqtt" {
         registry_type = "DOCR"
         registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
-        tag           = var.simulator_tag
-        deploy_on_push {
-          enabled = true
-        }
+        digest        = var.simulator_digest
       }
 
       env {
@@ -270,13 +307,13 @@ output "registry_endpoint" {
 }
 
 output "simulator_image" {
-  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.simulator_tag}"
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}@${var.simulator_digest}"
 }
 
 output "mosquitto_image" {
-  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.mosquitto_tag}"
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}@${var.mosquitto_digest}"
 }
 
 output "frontend_image" {
-  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.frontend_tag}"
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}@${var.frontend_digest}"
 }

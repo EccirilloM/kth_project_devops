@@ -1,0 +1,10 @@
+name: kth-devops-state
+services:
+  terraform:
+    image: hashicorp/terraform:1.13.3
+    working_dir: /workspace/infra
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Set state storage credentials in your terminal}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Set state storage credentials in your terminal}
+    volumes:
+      - ..:/workspace

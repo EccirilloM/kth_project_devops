@@ -88,18 +88,29 @@ jobs:
 
   dev:
     name: Deploy DigitalOcean App Platform (dev)
-    if: github.ref == 'refs/heads/dev'
+    if: github.ref == 'refs/heads/dev' && vars.DO_DEPLOY_ENABLED == 'true' && inputs.integration-passed
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     concurrency:
       group: mqtt-dev-app
       cancel-in-progress: false
     env:
-      IMAGE_REPOSITORY: mqtt
       TF_IN_AUTOMATION: 'true'
+      TF_STATE_MIGRATED: ${{ vars.TF_STATE_MIGRATED }}
+      TF_STATE_CONFIG_JSON: ${{ vars.TF_STATE_CONFIG_JSON }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
       DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
-      SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
+      TF_VAR_region: ${{ vars.TF_REGION || 'ams' }}
+      TF_VAR_registry_name: ${{ vars.TF_REGISTRY_NAME || 'mqtt-emulator-dev' }}
+      TF_VAR_image_repository: ${{ vars.TF_IMAGE_REPOSITORY || 'mqtt' }}
+      TF_VAR_domain: ${{ vars.TF_DOMAIN }}
+      TF_VAR_zone: ${{ vars.TF_ZONE }}
+      TF_VAR_project_name: ${{ vars.TF_PROJECT_NAME }}
+      TF_VAR_guest_password: ${{ secrets.GUEST_PASSWORD }}
+      TF_VAR_operator_password: ${{ secrets.OPERATOR_PASSWORD }}
+      TF_VAR_simulator_password: ${{ secrets.SIMULATOR_PASSWORD }}
     defaults:
       run:
         working-directory: infra
@@ -107,163 +118,62 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
-      - name: Require DO token
+      - name: Require secure state and runtime credentials
+        working-directory: .
+        run: bash ci/deploy/preflight.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-image-${{ github.sha }}'
+          path: ${{ runner.temp }}/runtime-images
+      - name: Load only the images checked by this CI run
         working-directory: .
         run: |
-          if [ -z "${DIGITALOCEAN_ACCESS_TOKEN:-}" ]; then
-            echo "::error::Add repository secret DIGITALOCEAN_ACCESS_TOKEN"
-            exit 1
-          fi
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-checked-${{ github.sha }}
-          path: FE/dist/sail-monitoring-web/browser/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: simulator-image-${{ github.sha }}
-          path: ${{ runner.temp }}/simulator-image
-
-      - name: Load tested simulator image
-        working-directory: ${{ runner.temp }}/simulator-image
-        run: |
-          sha256sum --check image.sha256
-          docker load --input image.tar
-          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{.Id}}')" = "$(cat image.id)"
-
+          for component in simulator broker frontend; do
+            bash ci/images.sh load "kth-devops-$component:$GITHUB_SHA" "$RUNNER_TEMP/runtime-images/$component-image-$GITHUB_SHA"
+          done
       - uses: hashicorp/setup-terraform@v3
         with:
+          terraform_version: 1.13.3
           terraform_wrapper: false
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+      - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ env.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Restore terraform state
-        uses: actions/cache/restore@v4
-        with:
-          path: infra/terraform.tfstate
-          key: mqtt-dev-tfstate-${{ github.ref_name }}
-          restore-keys: |
-            mqtt-dev-tfstate-${{ github.ref_name }}
-            mqtt-dev-tfstate-
-
-      - name: Terraform init
-        run: terraform init -input=false
-
-      - name: Terraform vars from GitHub
-        working-directory: .
+      - name: Initialize the migrated backend
         run: |
-          [[ -n "${{ vars.TF_REGION }}" ]] && echo "TF_VAR_region=${{ vars.TF_REGION }}" >> "$GITHUB_ENV"
-          [[ -n "${{ vars.TF_REGISTRY_NAME }}" ]] && echo "TF_VAR_registry_name=${{ vars.TF_REGISTRY_NAME }}" >> "$GITHUB_ENV"
-          [[ -n "${{ vars.TF_DOMAIN }}" ]] && echo "TF_VAR_domain=${{ vars.TF_DOMAIN }}" >> "$GITHUB_ENV"
-          [[ -n "${{ vars.TF_ZONE }}" ]] && echo "TF_VAR_zone=${{ vars.TF_ZONE }}" >> "$GITHUB_ENV"
-          [[ -n "${{ vars.TF_PROJECT_NAME }}" ]] && echo "TF_VAR_project_name=${{ vars.TF_PROJECT_NAME }}" >> "$GITHUB_ENV"
-          if [ -n "${{ secrets.SIMULATOR_PASSWORD }}" ]; then
-            echo "TF_VAR_simulator_password=${{ secrets.SIMULATOR_PASSWORD }}" >> "$GITHUB_ENV"
-          fi
-
-      - name: Adopt existing registry if needed
-        run: |
-          set -euo pipefail
-          if terraform state list 2>/dev/null | grep -qx 'digitalocean_container_registry.mqtt'; then
-            exit 0
-          fi
-          name="$(doctl registry get --format Name --no-header 2>/dev/null || true)"
-          if [ -n "$name" ]; then
-            terraform import -input=false digitalocean_container_registry.mqtt "$name"
-          fi
-
-      - name: Terraform — registry
-        run: terraform apply -input=false -auto-approve -target=digitalocean_container_registry.mqtt
-
-      - name: Log in to DOCR
+          terraform init -input=false -backend-config="$RUNNER_TEMP/backend.json"
+          terraform validate
+          # Never guess/import resources or create a second app after a missing-state restore.
+          terraform state list > "$RUNNER_TEMP/state-addresses.txt"
+          grep -qx 'digitalocean_container_registry.mqtt' "$RUNNER_TEMP/state-addresses.txt"
+          grep -qx 'digitalocean_app.mqtt' "$RUNNER_TEMP/state-addresses.txt"
+      - name: Authenticate to the existing registry
         run: doctl registry login --expiry-seconds 1800
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push images
-        id: image
+      - name: Publish unique image versions
         working-directory: .
+        run: bash ci/deploy/publish.sh
+      - name: Plan and update the application as one release
         run: |
-          set -euo pipefail
-          endpoint=$(doctl registry get --format Endpoint --no-header | tr -d '[:space:]')
-          existing="$(doctl registry repository list -o json 2>/dev/null | jq -r '.[0].name // empty' || true)"
-          repo_name="${existing:-$IMAGE_REPOSITORY}"
-          case "$repo_name" in
-            *[!a-zA-Z0-9._-]*|"") repo_name="$IMAGE_REPOSITORY" ;;
-          esac
-          image="$endpoint/$repo_name"
-          echo "Using DOCR repository: $repo_name"
-          echo "TF_VAR_image_repository=$repo_name" >> "$GITHUB_ENV"
-
-          docker tag "$SIMULATOR_IMAGE" "${image}:simulator"
-          docker tag "$SIMULATOR_IMAGE" "${image}:simulator-${GITHUB_SHA}"
-          docker push "${image}:simulator"
-          docker push "${image}:simulator-${GITHUB_SHA}"
-
-          build_flags=(--platform linux/amd64 --provenance=false --sbom=false --push)
-          docker buildx build "${build_flags[@]}" \
-            -f simulator/Dockerfile.mosquitto \
-            -t "${image}:mosquitto" -t "${image}:mosquitto-${GITHUB_SHA}" \
-            simulator
-
-          fe_ctx="$RUNNER_TEMP/fe-runtime"
-          mkdir -p "$fe_ctx"
-          cp FE/nginx.default.conf FE/docker-entrypoint.sh "$fe_ctx/"
-          cp -a FE/dist/sail-monitoring-web/browser/. "$fe_ctx/"
-          cat >"$fe_ctx/Dockerfile" <<'EOF'
-          FROM nginx:1.27-alpine
-          COPY nginx.default.conf /etc/nginx/conf.d/default.conf
-          COPY docker-entrypoint.sh /docker-entrypoint.sh
-          RUN chmod +x /docker-entrypoint.sh
-          COPY . /usr/share/nginx/html
-          EXPOSE 80
-          ENTRYPOINT ["/docker-entrypoint.sh"]
-          EOF
-          docker buildx build "${build_flags[@]}" \
-            -t "${image}:frontend" -t "${image}:frontend-${GITHUB_SHA}" \
-            "$fe_ctx"
-
-          tags_json="$(doctl registry repository list-tags "$repo_name" -o json)"
-          echo "$tags_json" | jq '[.[].tag // .[].Tag]'
-          for t in simulator mosquitto frontend; do
-            echo "$tags_json" | jq -e --arg t "$t" '[.[].tag // .[].Tag] | index($t)' >/dev/null \
-              || { echo "missing tag: $t"; exit 1; }
-          done
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-
-      - name: Adopt existing app if needed
-        run: |
-          set -euo pipefail
-          if terraform state list 2>/dev/null | grep -qx 'digitalocean_app.mqtt'; then
-            exit 0
-          fi
-          id="$(doctl apps list --format ID,Spec.Name --no-header 2>/dev/null | awk '$2=="mqtt-emulator"{print $1; exit}')"
-          if [ -n "$id" ]; then
-            terraform import -input=false digitalocean_app.mqtt "$id"
-          fi
-
-      - name: Terraform — app
-        run: terraform apply -input=false -auto-approve
-
-      - name: Save terraform state
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: infra/terraform.tfstate
-          key: mqtt-dev-tfstate-${{ github.ref_name }}-${{ github.run_id }}
-
-      - name: Summary
+          umask 077
+          terraform plan -input=false -out="$RUNNER_TEMP/deploy.tfplan"
+          terraform show -json "$RUNNER_TEMP/deploy.tfplan" > "$RUNNER_TEMP/deploy-plan.json"
+          bash ../ci/deploy/check-plan.sh "$RUNNER_TEMP/deploy-plan.json"
+          terraform apply -input=false "$RUNNER_TEMP/deploy.tfplan"
+      - name: Verify that the deployed frontend answers
+        run: bash ../ci/deploy/verify-release.sh
+      - name: Publish release references
         run: |
           {
-            echo "### Dev App Platform"
-            echo ""
-            echo "- UI: \`$(terraform output -raw app_url)\`"
-            echo "- broker: \`$(terraform output -raw broker_wss_url)\`"
-            echo "- images: \`${{ steps.image.outputs.image }}:{frontend,mosquitto,simulator}\`"
+            echo '### DigitalOcean release'
+            printf '\nUI: %s\n' "$(terraform output -raw app_url)"
+            printf '\nBroker: %s\n' "$(terraform output -raw broker_wss_url)"
+            cat "$RUNNER_TEMP/release/images.env"
           } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digitalocean-release-${{ github.sha }}
+          path: ${{ runner.temp }}/release/images.env
+          retention-days: 14
+          if-no-files-found: error
+      - name: Remove local registry authentication
+        if: always()
+        run: docker logout "registry.digitalocean.com"

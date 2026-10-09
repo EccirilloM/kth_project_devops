@@ -12,7 +12,8 @@ This README covers setup and verification. Architecture, design choices and limi
 
 | Service | Role |
 | --- | --- |
-| GitHub Actions, Pages and Container Registry (GHCR) | Run the pipeline, host the delivered frontend and distribute the simulator image when enabled. |
+| GitHub Actions and Pages | Run the pipeline and publish the validated static frontend on main. |
+| DigitalOcean App Platform and Container Registry (DOCR) | Host the persistent demo and distribute the exact container images verified in CI. |
 | Demo MQTT endpoint: `wss://mqtt.devopsproject.lios.cloud/mqtt` | Connect the browser and simulator for the shared demonstration. Hosting, accounts and TLS are managed separately from frontend delivery. |
 | OpenStreetMap tile service | Supply the map background; requires internet access. |
 | Container registries and npm registry | Supply build images, dependencies and vulnerability advisory data for checks. |
@@ -21,7 +22,7 @@ An **external broker** means a service running separately from the frontend; it 
 
 ## Requirements
 
-- Git and Docker with Linux containers and Docker Compose v2.
+- Git and Docker with Linux containers and Docker Compose v2. Git Bash is needed for laboratory orchestration on Windows.
 - Internet access for images and dependencies; port `4200` available.
 
 No host Node.js or Python installation is needed. Run the commands below from the **repository root** on Windows or macOS.
@@ -77,6 +78,7 @@ These checks run without a broker. Rebuild checking images after source or depen
 
 ```sh
 docker compose -f Docker/checks.compose.yaml run --rm workflows
+docker compose -f Docker/checks.compose.yaml run --rm infrastructure
 docker compose -f Docker/checks.compose.yaml build checks
 docker compose -f Docker/checks.compose.yaml run --rm checks npm run verify
 ```
@@ -104,17 +106,30 @@ These cover type checks, model/contract tests, dependency auditing and tests in 
 
 Successful checks exit with code `0`. Results are saved in `FE/test-results/`, `FE/playwright-report/` and `simulator/test-results/`. The frontend build is in `FE/dist/sail-monitoring-web/browser/`. CI retains diagnostic artifacts before cleanup.
 
+### Runtime frontend
+
+After frontend verification, test the actual Nginx image rather than only the lightweight smoke-test server:
+
+```sh
+docker compose -f Docker/runtime.compose.yaml build frontend
+docker compose -f Docker/runtime.compose.yaml up -d --wait --wait-timeout 120 frontend
+docker compose -f Docker/runtime.compose.yaml run --rm runtime-checks
+docker compose -f Docker/runtime.compose.yaml down
+```
+
+These checks verify missing-file handling, login startup and the identity of the compiled files served by Nginx.
+
 ## CI/CD
 
-[ci.yaml](.github/workflows/ci.yaml) runs on pushes to `main`, `dev`, `ettore` and `juozas`, pull requests targeting `main` or `dev`, and manual dispatch. It checks the frontend, simulator and security gates, with an optional Terraform integration job.
+[ci.yaml](.github/workflows/ci.yaml) runs on pushes to `main`, `dev`, `ettore` and `juozas`, pull requests targeting `main` or `dev`, and manual dispatch. It checks the frontend, simulator and security gates, followed by runtime-image checks and a required Terraform integration job.
 
 [cd.yaml](.github/workflows/cd.yaml) is called by CI on eligible `dev`/`main` pushes. It reuses the checked frontend build and tested simulator image:
 
 - On `main`, package the frontend delivery candidate.
-- On `dev` or `main`, optionally publish the simulator to GHCR with a commit tag and immutable digest. Updating the remote server is separate.
+- On `dev`, optionally publish the three checked images to DOCR and update the DigitalOcean demo together using their immutable digests.
 - On `main`, optionally deploy to GitHub Pages **after real integration tests pass**, supplying public runtime settings without rebuilding Angular.
 
-Candidates may be delivered with integration disabled; a failed integration job blocks CD. File hashes check frontend build reuse, excluding the replaceable runtime configuration.
+Integration must pass before CD runs. File hashes check frontend build reuse, excluding the replaceable runtime configuration. Images are transferred between jobs without rebuilding, and each release uses unique tags and immutable digests.
 
 | Check | Blocking policy |
 | --- | --- |
@@ -122,26 +137,44 @@ Candidates may be delivered with integration disabled; a failed integration job 
 | Tests, type checks, build and workflow validation | Failures block. |
 | Gitleaks | Detected secrets block. |
 | Dependency audit | High/critical findings, including development dependencies, and scan errors block. Low/moderate findings are reported. No audit exceptions are configured. |
-| Integration | When enabled, E2E and infrastructure/idempotence failures block. Required for Pages. |
+| Integration | E2E and infrastructure/idempotence failures block delivery and deployment. |
 
 Configure the following GitHub Actions repository variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `LAB_INTEGRATION_ENABLED=true` | Enable the Terraform lab after connecting its adapter. |
-| `GHCR_PUBLISH_ENABLED=true` | Enable simulator image publication. |
+| `DO_DEPLOY_ENABLED=true` | Enable DigitalOcean deployment after state migration and credential setup. |
+| `TF_STATE_MIGRATED=true` | Confirm the existing infrastructure state has been migrated and checked. |
 | `PAGES_DEPLOY_ENABLED=true` | Enable Pages deployment after successful integration. |
 | `PAGES_PUBLIC_CONFIG_JSON` | Public configuration in the JSON format above; no credentials. |
 
-Absent enable flags leave those jobs disabled. Set the Pages deployment source to **GitHub Actions**, configure GHCR package read access for the deployment host, and require CI checks and peer review through GitHub branch protection.
+Absent deployment flags leave publication disabled; the laboratory still runs. Set the Pages source to **GitHub Actions** and require CI checks and peer review through branch protection. DigitalOcean additionally requires the backend settings and secrets in [infra/README.md](infra/README.md). The old GHCR and optional-lab flags are no longer used.
 
 ## Infrastructure and real MQTT tests
 
-**Infrastructure setup instructions will be added with Juozas's Terraform integration.** The adapter in [ci/lab/adapter.sh](ci/lab/adapter.sh) must be connected before enabling the integration job.
+The laboratory is independent of DigitalOcean: Terraform's Docker provider creates an isolated network, a real WSS Mosquitto broker, the simulator and the checked frontend image. Temporary credentials and a local certificate authority are generated per environment. Browser certificate verification remains enabled.
 
-The lab contract uses an isolated Docker network with Mosquitto, the simulator and a server for the checked frontend build. [ci/lab/run.sh](ci/lab/run.sh) coordinates provisioning, a second apply with no changes, tests, diagnostics and cleanup; [manifest.example.json](ci/lab/manifest.example.json) defines the environment interface.
+After `npm run verify` through the checking container, run:
 
-The prepared [E2E suite](FE/e2e/integration/broker.spec.ts) covers live telemetry and recording, malformed messages, stale data, broker restart/recovery and broker-enforced denial of guest commands. These disruptive tests require a disposable environment, separate from the shared demonstration broker.
+**Windows PowerShell:**
+
+```powershell
+./ci/lab/check.ps1
+```
+
+**macOS or Git Bash:**
+
+```sh
+bash ci/lab/check.sh
+```
+
+The script builds container tools and runtime images, provisions the lab, verifies no-change plans around a second apply, runs the real MQTT suite, collects redacted diagnostics and tears down the resources even after failures. No cloud credentials or host Terraform installation are required. Private state, plans and certificates remain under the ignored `.runtime/<environment-id>/` directory; do not share that directory.
+
+Idempotence requires every planned resource/output action to be `no-op`. The checker separately records the Docker provider's refresh of specific unset optional collections into empty lists/maps; other detected drift still fails the check.
+
+The [E2E suite](FE/e2e/integration/broker.spec.ts) checks live telemetry and recording, malformed messages, stale data, broker recovery and broker-enforced guest command denial. Public diagnostics are in `FE/test-results/lab-diagnostics/` and `FE/test-results/integration/`. These disruptive tests never target the shared demo broker.
+
+On a teardown failure, retain the printed environment ID and run `bash ci/lab/run.sh down` with `KTH_ENVIRONMENT_ID` set to that same value. Do not delete its private state before cleanup succeeds.
 
 ## AI assistance
 

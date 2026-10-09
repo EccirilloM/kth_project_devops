@@ -53,7 +53,19 @@ export async function login(page: Page, credentials = lab.operator): Promise<voi
   await page.getByLabel('Username', {exact: true}).fill(credentials.username);
   await page.getByLabel('Password', {exact: true}).fill(credentials.password);
   await page.getByRole('button', {name: 'Sign in'}).click();
-  await expect(page.getByTestId('connection-status')).toHaveText('MQTT: connected');
+  const connection = page.getByTestId('connection-status');
+  const failure = page.getByRole('alert');
+  await expect(connection.or(failure).first()).toBeVisible();
+  if (await failure.isVisible()) {
+    const capabilities = await page.evaluate(() => ({
+      secureContext: window.isSecureContext,
+      randomUUID: typeof globalThis.crypto?.randomUUID,
+      getRandomValues: typeof globalThis.crypto?.getRandomValues,
+    }));
+    throw new Error('Laboratory browser login failed: ' + await failure.innerText() +
+      '; browser capabilities: ' + JSON.stringify(capabilities));
+  }
+  await expect(connection).toHaveText('MQTT: connected');
 }
 
 export async function live(page: Page): Promise<void> {

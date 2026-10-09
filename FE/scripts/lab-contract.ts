@@ -1,6 +1,4 @@
 import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
 
 export interface LabCredentials { username: string; password: string }
 export interface Lab {
@@ -59,9 +57,4 @@ export function readLab(): Lab {
   try { value = JSON.parse(readFileSync(manifest, 'utf8')); }
   catch { throw new Error('Laboratory manifest cannot be read as JSON.'); }
   return parseLab(value, process.env['KTH_EXPECTED_ENVIRONMENT'] ?? '');
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  // Only the validated network name is emitted; never print the manifest.
-  console.log(readLab().network);
 }

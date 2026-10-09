@@ -1,10 +1,12 @@
 import {test, expect} from '@playwright/test';
+import {createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 
 // These are startup smoke tests, not real broker integration tests.
-test.beforeEach(async ({context}) => {
+test.beforeEach(async ({context, baseURL}) => {
   await context.route('**/*', route => {
     const url = new URL(route.request().url());
-    return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
+    return url.origin === new URL(baseURL!).origin ? route.continue() : route.abort();
   });
   // No smoke test should open a broker connection, even after a regression.
   await context.routeWebSocket(/.*/, socket => socket.close());
@@ -64,4 +66,13 @@ for (const scenario of ['missing', 'malformed', 'insecure-url']) {
 test('missing assets return an error rather than an HTML fallback', async ({request}) => {
   const response = await request.get('assets/does-not-exist.json');
   expect(response.status()).toBe(404);
+});
+
+test('server delivers the checked compiled files unchanged', async ({request}) => {
+  const manifest = JSON.parse(await readFile('dist/sail-monitoring-web/browser/build-manifest.json', 'utf8'));
+  for (const [name, expected] of Object.entries(manifest.files)) {
+    const response = await request.get(name);
+    expect(response.ok(), name).toBe(true);
+    expect(createHash('sha256').update(await response.body()).digest('hex'), name).toBe(expected);
+  }
 });

@@ -36,6 +36,10 @@ case "${1:-}" in
     adapter_operation up
     test -s "$KTH_RUNTIME_DIR/manifest.json"
     test -s "$KTH_RUNTIME_DIR/ca.crt"
+    docker run --rm --network "$KTH_ENVIRONMENT_ID-network" \
+      --mount "type=bind,source=$KTH_RUNTIME_DIR,target=/lab,readonly" \
+      --env KTH_LAB_MANIFEST=/lab/manifest.json --env NODE_EXTRA_CA_CERTS=/lab/ca.crt \
+      "$image" node scripts/lab-ready.mjs
     ;;
   idempotence)
     adapter_operation plan
@@ -48,7 +52,7 @@ case "${1:-}" in
     network=$(docker run --rm \
       --mount "type=bind,source=$KTH_RUNTIME_DIR,target=/lab,readonly" \
       --env KTH_LAB_MANIFEST=/lab/manifest.json --env "KTH_EXPECTED_ENVIRONMENT=$KTH_ENVIRONMENT_ID" \
-      "$image" node --experimental-transform-types --import ./tests/register.mjs scripts/lab-contract.ts)
+      "$image" node --experimental-transform-types --import ./tests/register.mjs scripts/lab-network.mjs)
     identity=$(docker network inspect --format '{{ index .Labels "kth.devops.environment" }}' "$network")
     [[ "$identity" == "$KTH_ENVIRONMENT_ID" ]] || { echo 'Network ownership mismatch' >&2; exit 2; }
     docker run --rm --init --shm-size=1g --network "$network" \

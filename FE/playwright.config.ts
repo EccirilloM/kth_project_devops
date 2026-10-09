@@ -1,4 +1,5 @@
 import {defineConfig, devices} from '@playwright/test';
+const external = process.env['KTH_SMOKE_BASE_URL'];
 
 export default defineConfig({
   testDir: './e2e/smoke',
@@ -15,7 +16,7 @@ export default defineConfig({
     ['junit', {outputFile: 'test-results/browser.xml'}],
   ],
   use: {
-    baseURL: 'http://127.0.0.1:4173/kth_project_devops/',
+    baseURL: external ?? 'http://127.0.0.1:4173/kth_project_devops/',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -25,7 +26,7 @@ export default defineConfig({
     {name: 'chromium', use: {...devices['Desktop Chrome']}},
     {name: 'mobile-chromium', use: {...devices['Pixel 7']}},
   ],
-  webServer: {
+  webServer: external ? undefined : {
     command: 'node scripts/serve-build.mjs',
     url: 'http://127.0.0.1:4173/kth_project_devops/',
     reuseExistingServer: false,

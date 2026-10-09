@@ -2,6 +2,7 @@ import { StateCell as BehaviorSubject } from './state-cell';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import { type AppConfig, brokerUrl, roleForUsername } from './app-config';
 import { TOPICS } from './topics';
+import { randomId } from './random-id';
 import { commandPayload, dashboardPayload, indicatorsPayload, mapPayload, mechatronicsPayload, object, recordingPayload } from './payloads';
 import { AuthRoles } from '../../dtos/auth/auth-roles';
 import type { DashboardData } from '../../dtos/DashboardData';
@@ -85,7 +86,7 @@ export class MqttSession {
     try {
       client = this.connector(credentials.url, {
         username: credentials.username, password: credentials.password,
-        clientId: `polisail_web_${crypto.randomUUID()}`,
+        clientId: `polisail_web_${randomId()}`,
         protocolVersion: 5, clean: true, reconnectPeriod: 0,
         connectTimeout: this.config.connectTimeoutMs, queueQoSZero: false,
         resubscribe: false, keepalive: 30, properties: {sessionExpiryInterval: 0},
@@ -225,7 +226,7 @@ export class MqttSession {
     }
     if (command.type === ClientCommandType.StartRecording || command.type === ClientCommandType.StopRecording) {
       const start = command.type === ClientCommandType.StartRecording;
-      const id = crypto.randomUUID();
+      const id = randomId();
       const timer = setTimeout(() => this.recordingUnknown(id, 'Risposta non ricevuta: esito sconosciuto. Attendi un nuovo stato della barca.'), this.config.commandTimeoutMs);
       this.pending = {id, topic: start ? TOPICS.startResponse : TOPICS.stopResponse, timer};
       this.pending$.next(true);

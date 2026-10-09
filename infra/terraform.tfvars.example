@@ -1,5 +1,6 @@
-# Local use only — CI reads optional TF_* vars from GitHub Environment mqtt-dev.
-# export DIGITALOCEAN_TOKEN=dop_v1_...
+# Optional public values for the persistent demo; preserve existing resource identities.
+# CI uses repository variables. See infra/README.md for runtime secrets and state migration.
+# Supply the three image digests and passwords at runtime, not in a tracked file.
 
 #region = "ams"
 #registry_name = "mqtt-emulator-dev"
