@@ -1,3 +1,8 @@
+# Dev stack on one App Platform app: FE (nginx) + Mosquitto + simulator.
+#
+# Secret: DIGITALOCEAN_ACCESS_TOKEN (repository Actions secret)
+# Optional vars: TF_DOMAIN, TF_ZONE, TF_PROJECT_NAME, TF_REGISTRY_NAME, TF_REGION
+
 name: MQTT emulator (dev)
 
 on:
@@ -5,6 +10,7 @@ on:
     branches: [dev]
     paths:
       - 'simulator/**'
+      - 'FE/**'
       - 'infra/**'
       - '.github/workflows/mqtt-dev.yml'
   workflow_dispatch:
@@ -35,12 +41,9 @@ jobs:
         working-directory: .
         run: |
           if [ -z "${DIGITALOCEAN_ACCESS_TOKEN:-}" ]; then
-            echo "::error::Secret DIGITALOCEAN_ACCESS_TOKEN is empty."
-            echo "Add it under Settings → Secrets and variables → Actions → Repository secrets."
-            echo "Do not use a Variable — it must be a Secret."
+            echo "::error::Add repository secret DIGITALOCEAN_ACCESS_TOKEN"
             exit 1
           fi
-          echo "DO token is present (length ${#DIGITALOCEAN_ACCESS_TOKEN})."
 
       - uses: actions/setup-node@v4
         with:
@@ -112,7 +115,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 2) Build and push images (one DOCR repo, two tags)
+      - name: 2) Build and push images
         id: image
         working-directory: .
         run: |
@@ -126,7 +129,6 @@ jobs:
           image="$endpoint/$repo_name"
           echo "Using DOCR repository: $repo_name"
           echo "TF_VAR_image_repository=$repo_name" >> "$GITHUB_ENV"
-          # provenance/sbom off: App Platform rejects buildx attestation manifest lists
           build_flags=(--platform linux/amd64 --provenance=false --sbom=false --push)
           docker buildx build "${build_flags[@]}" \
             -f simulator/Dockerfile \
@@ -136,12 +138,16 @@ jobs:
             -f simulator/Dockerfile.mosquitto \
             -t "${image}:mosquitto" -t "${image}:mosquitto-${GITHUB_SHA}" \
             simulator
+          docker buildx build "${build_flags[@]}" \
+            -f FE/Dockerfile \
+            -t "${image}:frontend" -t "${image}:frontend-${GITHUB_SHA}" \
+            FE
           tags_json="$(doctl registry repository list-tags "$repo_name" -o json)"
-          echo "$tags_json" | jq .
-          echo "$tags_json" | jq -e '[.[].tag // .[].Tag] | index("simulator")' >/dev/null \
-            || { echo "missing tag: simulator in $repo_name"; exit 1; }
-          echo "$tags_json" | jq -e '[.[].tag // .[].Tag] | index("mosquitto")' >/dev/null \
-            || { echo "missing tag: mosquitto in $repo_name"; exit 1; }
+          echo "$tags_json" | jq '[.[].tag // .[].Tag]'
+          for t in simulator mosquitto frontend; do
+            echo "$tags_json" | jq -e --arg t "$t" '[.[].tag // .[].Tag] | index($t)' >/dev/null \
+              || { echo "missing tag: $t"; exit 1; }
+          done
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
 
@@ -157,7 +163,7 @@ jobs:
             terraform import -input=false digitalocean_app.mqtt "$id"
           fi
 
-      - name: 3) Terraform — create/update app (+ DNS/project)
+      - name: 3) Terraform — create/update app
         run: terraform apply -input=false -auto-approve
 
       - name: Save terraform state
@@ -170,12 +176,9 @@ jobs:
       - name: Outputs
         run: |
           {
-            echo "### Dev emulator"
+            echo "### Dev app"
             echo ""
-            echo "- registry: \`$(terraform output -raw registry_name)\`"
+            echo "- UI: \`$(terraform output -raw app_url)\`"
             echo "- broker: \`$(terraform output -raw broker_wss_url)\`"
-            echo "- app: \`$(terraform output -raw app_url)\`"
-            echo "- images: \`${{ steps.image.outputs.image }}:simulator\`, \`${{ steps.image.outputs.image }}:mosquitto\`"
-            echo ""
-            echo "Set repository variable \`MQTT_BROKER_URL\` to the broker URL for pages-dev."
+            echo "- images: \`${{ steps.image.outputs.image }}:{frontend,mosquitto,simulator}\`"
           } >> "$GITHUB_STEP_SUMMARY"

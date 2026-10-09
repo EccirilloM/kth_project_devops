@@ -35,6 +35,11 @@ variable "simulator_tag" {
   default = "simulator"
 }
 
+variable "frontend_tag" {
+  type    = string
+  default = "frontend"
+}
+
 variable "simulator_password" {
   type      = string
   default   = "simulatorpass"
@@ -118,6 +123,47 @@ resource "digitalocean_app" "mqtt" {
           }
         }
       }
+
+      rule {
+        component {
+          name = "frontend"
+        }
+        match {
+          path {
+            prefix = "/"
+          }
+        }
+      }
+    }
+
+    service {
+      name               = "frontend"
+      instance_count     = 1
+      instance_size_slug = var.instance_size
+      http_port          = 80
+
+      image {
+        registry_type = "DOCR"
+        registry      = digitalocean_container_registry.mqtt.name
+        repository    = var.image_repository
+        tag           = var.frontend_tag
+        deploy_on_push {
+          enabled = true
+        }
+      }
+
+      env {
+        key   = "APP_URL"
+        value = "$${APP_URL}"
+      }
+
+      dynamic "env" {
+        for_each = var.domain != "" ? [var.domain] : []
+        content {
+          key   = "MQTT_BROKER_URL"
+          value = "wss://${env.value}/mqtt"
+        }
+      }
     }
 
     service {
@@ -129,6 +175,7 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
+        registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
         tag           = var.mosquitto_tag
         deploy_on_push {
@@ -144,6 +191,7 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
+        registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
         tag           = var.simulator_tag
         deploy_on_push {
@@ -227,4 +275,8 @@ output "simulator_image" {
 
 output "mosquitto_image" {
   value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.mosquitto_tag}"
+}
+
+output "frontend_image" {
+  value = "${digitalocean_container_registry.mqtt.endpoint}/${var.image_repository}:${var.frontend_tag}"
 }
