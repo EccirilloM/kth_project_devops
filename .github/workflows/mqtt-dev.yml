@@ -22,13 +22,13 @@ env:
   EMULATOR_IMAGE: mqtt-emulator
   MOSQUITTO_IMAGE: mqtt-mosquitto
   TF_IN_AUTOMATION: 'true'
-  DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-  DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: mqtt-dev
+    env:
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN || secrets.DIGITALOCEAN_TOKEN }}
     permissions:
       contents: read
     defaults:
@@ -41,9 +41,12 @@ jobs:
         working-directory: .
         run: |
           if [ -z "${DIGITALOCEAN_ACCESS_TOKEN:-}" ]; then
-            echo "Add secret DIGITALOCEAN_ACCESS_TOKEN to Environment mqtt-dev"
+            echo "::error::Secret DIGITALOCEAN_ACCESS_TOKEN is empty."
+            echo "Add it under Settings → Secrets and variables → Actions → Repository secrets."
+            echo "Do not use a Variable — it must be a Secret."
             exit 1
           fi
+          echo "DO token is present (length ${#DIGITALOCEAN_ACCESS_TOKEN})."
 
       - uses: actions/setup-node@v4
         with:
@@ -68,7 +71,7 @@ jobs:
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          token: ${{ env.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Restore terraform state
         uses: actions/cache/restore@v4
@@ -166,5 +169,5 @@ jobs:
             echo "- app: \`$(terraform output -raw app_url)\`"
             echo "- images: \`${{ steps.image.outputs.emulator }}:latest\`, \`${{ steps.image.outputs.mosquitto }}:latest\`"
             echo ""
-            echo "Set Environment var \`MQTT_BROKER_URL\` to the broker URL for pages-dev."
+            echo "Set repository variable \`MQTT_BROKER_URL\` to the broker URL for pages-dev."
           } >> "$GITHUB_STEP_SUMMARY"
