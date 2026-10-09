@@ -36,6 +36,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Verify that delivery reuses the tested files
         run: >-
           docker run --rm
@@ -73,6 +75,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Supply public settings without rebuilding the frontend
         env:
           KTH_PUBLIC_CONFIG: ${{ vars.PAGES_PUBLIC_CONFIG_JSON }}

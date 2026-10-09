@@ -33,6 +33,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh rhysd/actionlint:1.7.12 node:24-bookworm-slim
       # Also run locally before pushing: a workflow rejected by GitHub cannot run this step.
       - name: Validate GitHub Actions workflows
         run: docker compose -f Docker/checks.compose.yaml run --rm workflows
@@ -90,6 +92,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh ghcr.io/gitleaks/gitleaks:v8.30.1
       - name: Build the scanner image
         id: image
         run: docker compose -f Docker/checks.compose.yaml build secrets
@@ -129,6 +133,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh node:24-bookworm-slim
       - name: Build simulator checking tools
         run: docker compose -f Docker/checks.compose.yaml build simulator-checks
       - name: Check TypeScript, simulator behavior and all dependencies
@@ -197,6 +203,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh hashicorp/terraform:1.13.3 node:24-bookworm-slim nginx:1.28-alpine eclipse-mosquitto:2
       - name: Build runtime images from the checked frontend
         run: |
           docker compose -f Docker/checks.compose.yaml run --rm infrastructure
@@ -267,6 +275,8 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download base images with bounded retries
+        run: bash ci/pull-images.sh node:24-bookworm-slim hashicorp/terraform:1.13.3
       - name: Build test tooling without rebuilding the frontend
         run: docker compose -f Docker/checks.compose.yaml build checks
       - uses: actions/download-artifact@v4

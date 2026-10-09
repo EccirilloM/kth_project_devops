@@ -153,6 +153,8 @@ Absent deployment flags disable cloud deployment; the laboratory and the deliver
 
 CI and frontend delivery log in to Docker Hub before pulling images when `DOCKERHUB_USERNAME` is set. Fork pull requests and Dependabot runs use anonymous pulls, without this credential. Authentication uses the account's pull quota; it does not remove Docker Hub limits. Local Docker Desktop sign-in does not authenticate GitHub runners.
 
+Base images are downloaded before builds, with up to three attempts for recognized temporary registry/server errors and pauses of 15 and 30 seconds. Persistent failures still block the pipeline; authentication errors and pull-rate limits are not retried. Tests and Terraform operations are not automatically retried.
+
 ## Infrastructure and real MQTT tests
 
 The laboratory is independent of DigitalOcean: Terraform's Docker provider creates an isolated network, a real WSS Mosquitto broker, the simulator and the checked frontend image. Temporary credentials and a local certificate authority are generated per environment. Browser certificate verification remains enabled.
