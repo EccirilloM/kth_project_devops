@@ -1,3 +1,19 @@
+# Build MQTT images and push to DigitalOcean Container Registry.
+# App Platform redeploys automatically (deploy_on_push on DOCR) — no manual
+# doctl apps create-deployment needed.
+#
+# GitHub Environment: mqtt-dev
+#
+# Required variables:
+#   DOCR_REGISTRY — terraform output registry_name
+#
+# Required secrets:
+#   DIGITALOCEAN_ACCESS_TOKEN — doctl auth (registry login + push)
+#
+# Images (linux/amd64) pushed to:
+#   registry.digitalocean.com/<DOCR_REGISTRY>/mqtt-emulator:<sha|:latest>
+#   registry.digitalocean.com/<DOCR_REGISTRY>/mqtt-mosquitto:<sha|:latest>
+
 name: MQTT emulator (dev)
 
 on:
@@ -13,19 +29,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: ghcr.io
   EMULATOR_IMAGE: mqtt-emulator
   MOSQUITTO_IMAGE: mqtt-mosquitto
 
 jobs:
   test-and-push:
     runs-on: ubuntu-latest
+    environment: mqtt-dev
     permissions:
       contents: read
-      packages: write
-    outputs:
-      emulator_image: ${{ steps.image.outputs.emulator }}
-      mosquitto_image: ${{ steps.image.outputs.mosquitto }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,28 +51,50 @@ jobs:
         working-directory: simulator
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
-          if compgen -G 'test/**/*.test.ts' > /dev/null; then
+          if compgen -G 'test/**/*.test.ts' > /dev/null || compgen -G 'test/**/*.test.mjs' > /dev/null; then
             npm test
           else
             echo 'No simulator unit tests under test/; skipping'
           fi
 
-      - name: Set image references
-        id: image
+      - name: Require DOCR settings
+        env:
+          DOCR_REGISTRY: ${{ vars.DOCR_REGISTRY }}
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
         run: |
-          owner_repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "emulator=${{ env.REGISTRY }}/${owner_repo}/${{ env.EMULATOR_IMAGE }}" >> "$GITHUB_OUTPUT"
-          echo "mosquitto=${{ env.REGISTRY }}/${owner_repo}/${{ env.MOSQUITTO_IMAGE }}" >> "$GITHUB_OUTPUT"
+          missing=
+          for name in DOCR_REGISTRY DIGITALOCEAN_ACCESS_TOKEN; do
+            eval "val=\$$name"
+            if [ -z "$val" ]; then
+              echo "Missing required setting: $name"
+              missing=1
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "Configure Environment mqtt-dev (see workflow header / infra/README.md)."
+            exit 1
+          fi
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DOCR
+        run: doctl registry login --expiry-seconds 1200
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image refs
+        id: image
+        env:
+          DOCR_REGISTRY: ${{ vars.DOCR_REGISTRY }}
+        run: |
+          endpoint=$(doctl registry get --format Endpoint --no-header)
+          echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
+          echo "emulator=$endpoint/${DOCR_REGISTRY}/${{ env.EMULATOR_IMAGE }}" >> "$GITHUB_OUTPUT"
+          echo "mosquitto=$endpoint/${DOCR_REGISTRY}/${{ env.MOSQUITTO_IMAGE }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push emulator (amd64)
         uses: docker/build-push-action@v6
@@ -84,41 +118,8 @@ jobs:
             ${{ steps.image.outputs.mosquitto }}:${{ github.sha }}
             ${{ steps.image.outputs.mosquitto }}:latest
 
-  deploy:
-    needs: test-and-push
-    runs-on: ubuntu-latest
-    environment: mqtt-dev
-    permissions:
-      contents: read
-    steps:
-      - name: Require deploy settings
-        env:
-          APP_ID: ${{ vars.APP_ID }}
-          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Done
         run: |
-          missing=
-          for name in APP_ID DIGITALOCEAN_ACCESS_TOKEN; do
-            eval "val=\$$name"
-            if [ -z "$val" ]; then
-              echo "Missing required setting: $name"
-              missing=1
-            fi
-          done
-          if [ -n "$missing" ]; then
-            echo "Configure Environment mqtt-dev (see workflow header)."
-            exit 1
-          fi
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Redeploy App Platform app
-        env:
-          APP_ID: ${{ vars.APP_ID }}
-        run: |
-          set -euo pipefail
-          doctl apps create-deployment "$APP_ID" --wait
-          echo "Deployed emulator=${{ needs.test-and-push.outputs.emulator_image }}:${{ github.sha }}"
-          echo "Deployed mosquitto=${{ needs.test-and-push.outputs.mosquitto_image }}:${{ github.sha }}"
+          echo "Pushed ${{ steps.image.outputs.emulator }}:latest"
+          echo "Pushed ${{ steps.image.outputs.mosquitto }}:latest"
+          echo "App Platform will auto-redeploy via DOCR deploy_on_push."
