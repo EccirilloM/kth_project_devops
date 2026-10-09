@@ -193,7 +193,7 @@ resource "digitalocean_project" "this" {
   name        = var.project_name
   description = "Boat MQTT emulator (for dev)"
   purpose     = "Web App"
-  environment = "dev"
+  environment = "development"
 }
 
 resource "digitalocean_project_resources" "this" {
