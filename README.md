@@ -143,12 +143,15 @@ Configure the following GitHub Actions repository variables:
 
 | Variable | Purpose |
 | --- | --- |
+| `DOCKERHUB_USERNAME` | Docker ID used for authenticated image downloads. Store its read-only access token separately as the repository secret `DOCKERHUB_TOKEN`. |
 | `DO_DEPLOY_ENABLED=true` | Enable DigitalOcean deployment after state migration and credential setup. |
 | `TF_STATE_MIGRATED=true` | Confirm the existing infrastructure state has been migrated and checked. |
 | `PAGES_DEPLOY_ENABLED=true` | Enable Pages deployment after successful integration. |
 | `PAGES_PUBLIC_CONFIG_JSON` | Public configuration in the JSON format above; no credentials. |
 
 Absent deployment flags disable cloud deployment; the laboratory and the delivery-candidate job on `main` still run. Set the Pages source to **GitHub Actions** and require CI checks and peer review through an active branch ruleset or branch protection. DigitalOcean additionally requires the backend settings and secrets in [infra/README.md](infra/README.md).
+
+CI and frontend delivery log in to Docker Hub before pulling images when `DOCKERHUB_USERNAME` is set. Fork pull requests and Dependabot runs use anonymous pulls, without this credential. Authentication uses the account's pull quota; it does not remove Docker Hub limits. Local Docker Desktop sign-in does not authenticate GitHub runners.
 
 ## Infrastructure and real MQTT tests
 
