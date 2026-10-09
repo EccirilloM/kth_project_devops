@@ -197,7 +197,6 @@ jobs:
       (needs.integration.result == 'success' || needs.integration.result == 'skipped')
     permissions:
       contents: read
-      packages: write
       pages: write
       id-token: write
     uses: ./.github/workflows/cd.yaml

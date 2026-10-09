@@ -12,72 +12,11 @@ permissions:
   contents: read
 
 jobs:
-  simulator-publish:
-    name: Publish tested simulator candidate to GHCR
-    if: >-
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') &&
-      vars.GHCR_PUBLISH_ENABLED == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      packages: write
-    env:
-      SIMULATOR_IMAGE: kth-devops-simulator:${{ github.sha }}
-    steps:
-      - name: Prepare isolated registry authentication directory
-        run: |
-          mkdir -p "$RUNNER_TEMP/ghcr-auth"
-          chmod 700 "$RUNNER_TEMP/ghcr-auth"
-          printf 'DOCKER_CONFIG=%s/ghcr-auth\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
-        with:
-          name: simulator-image-${{ github.sha }}
-          path: ${{ runner.temp }}/simulator-image
-      - name: Load and verify the previously tested image
-        working-directory: ${{ runner.temp }}/simulator-image
-        run: |
-          sha256sum --check image.sha256
-          docker load --input image.tar
-          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{.Id}}')" = "$(cat image.id)"
-          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
-          test "$(docker image inspect "$SIMULATOR_IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
-      - name: Authenticate with the repository token
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      - name: Publish commit tag and record the immutable pull reference
-        run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}/simulator"
-          tag="$image:sha-$GITHUB_SHA"
-          docker tag "$SIMULATOR_IMAGE" "$tag"
-          docker push "$tag"
-          reference=$(docker image inspect "$tag" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -F "$image@sha256:")
-          [[ "$reference" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$ ]]
-          mkdir -p "$RUNNER_TEMP/simulator-release"
-          printf 'GHCR_IMAGE=%s\n' "$reference" > "$RUNNER_TEMP/simulator-release/image.env"
-          {
-            echo '### Simulator image published'
-            printf '\nCommit: %s\n\nPlatform: linux/amd64\n' "$GITHUB_SHA"
-            printf '\nTag: %s\n\nGHCR_IMAGE=%s\n' "$tag" "$reference"
-            echo
-            echo 'This candidate passed model tests and dependency/security gates; it is not evidence of real MQTT integration or Droplet deployment.'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Store the simulator pull reference
-        uses: actions/upload-artifact@v4
-        with:
-          name: simulator-release-${{ github.sha }}
-          path: ${{ runner.temp }}/simulator-release/image.env
-          if-no-files-found: error
-          retention-days: 14
-      - name: Remove registry authentication
-        if: always()
-        run: docker logout ghcr.io
+  # Dev images are pushed to DOCR in the "dev" job (not GHCR).
 
   delivery:
     name: Package frontend delivery candidate
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -104,7 +43,7 @@ jobs:
   pages-package:
     name: Prepare validated Pages artifact
     if: >-
-      github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
       vars.PAGES_DEPLOY_ENABLED == 'true' && inputs.integration-passed
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -276,8 +215,16 @@ jobs:
           fe_ctx="$RUNNER_TEMP/fe-runtime"
           mkdir -p "$fe_ctx"
           cp FE/nginx.default.conf FE/docker-entrypoint.sh "$fe_ctx/"
-          cp FE/Dockerfile.runtime "$fe_ctx/Dockerfile"
           cp -a FE/dist/sail-monitoring-web/browser/. "$fe_ctx/"
+          cat >"$fe_ctx/Dockerfile" <<'EOF'
+          FROM nginx:1.27-alpine
+          COPY nginx.default.conf /etc/nginx/conf.d/default.conf
+          COPY docker-entrypoint.sh /docker-entrypoint.sh
+          RUN chmod +x /docker-entrypoint.sh
+          COPY . /usr/share/nginx/html
+          EXPOSE 80
+          ENTRYPOINT ["/docker-entrypoint.sh"]
+          EOF
           docker buildx build "${build_flags[@]}" \
             -t "${image}:frontend" -t "${image}:frontend-${GITHUB_SHA}" \
             "$fe_ctx"
