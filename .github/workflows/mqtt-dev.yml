@@ -126,14 +126,22 @@ jobs:
           image="$endpoint/$repo_name"
           echo "Using DOCR repository: $repo_name"
           echo "TF_VAR_image_repository=$repo_name" >> "$GITHUB_ENV"
-          docker buildx build --platform linux/amd64 \
+          # provenance/sbom off: App Platform rejects buildx attestation manifest lists
+          build_flags=(--platform linux/amd64 --provenance=false --sbom=false --push)
+          docker buildx build "${build_flags[@]}" \
             -f simulator/Dockerfile \
             -t "${image}:simulator" -t "${image}:simulator-${GITHUB_SHA}" \
-            --push simulator
-          docker buildx build --platform linux/amd64 \
+            simulator
+          docker buildx build "${build_flags[@]}" \
             -f simulator/Dockerfile.mosquitto \
             -t "${image}:mosquitto" -t "${image}:mosquitto-${GITHUB_SHA}" \
-            --push simulator
+            simulator
+          tags_json="$(doctl registry repository list-tags "$repo_name" -o json)"
+          echo "$tags_json" | jq .
+          echo "$tags_json" | jq -e '[.[].tag // .[].Tag] | index("simulator")' >/dev/null \
+            || { echo "missing tag: simulator in $repo_name"; exit 1; }
+          echo "$tags_json" | jq -e '[.[].tag // .[].Tag] | index("mosquitto")' >/dev/null \
+            || { echo "missing tag: mosquitto in $repo_name"; exit 1; }
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "repo=$repo_name" >> "$GITHUB_OUTPUT"
 
