@@ -151,7 +151,7 @@ Configure the following GitHub Actions repository variables:
 
 Absent deployment flags disable cloud deployment; the laboratory and the delivery-candidate job on `main` still run. Set the Pages source to **GitHub Actions** and require CI checks and peer review through an active branch ruleset or branch protection. DigitalOcean additionally requires the backend settings and secrets in [infra/README.md](infra/README.md).
 
-CI and frontend delivery log in to Docker Hub before pulling images when `DOCKERHUB_USERNAME` is set. Fork pull requests and Dependabot runs use anonymous pulls, without this credential. Authentication uses the account's pull quota; it does not remove Docker Hub limits. Local Docker Desktop sign-in does not authenticate GitHub runners.
+Jobs that need Docker Hub log in before pulling images when `DOCKERHUB_USERNAME` is set. Login allows three attempts with pauses of 15 and 30 seconds; if all fail, the job fails. Fork pull requests and Dependabot runs use anonymous pulls, without this credential. Authentication uses the account's pull quota; it does not remove Docker Hub limits. Local Docker Desktop sign-in does not authenticate GitHub runners. Secret scanning pulls Gitleaks from GHCR and does not require Docker Hub login.
 
 Base images are downloaded before builds, with up to three attempts for recognized temporary registry/server errors and pauses of 15 and 30 seconds. Persistent failures still block the pipeline; authentication errors and pull-rate limits are not retried. Tests and Terraform operations are not automatically retried.
 
