@@ -1,12 +1,13 @@
 #!/bin/bash
 set -euo pipefail
-if [[ "${TF_STATE_MIGRATED:-false}" != true ]]; then
-  echo '::error::Migrate and verify the existing Terraform state before enabling DigitalOcean deployment.'
-  exit 1
-fi
-for name in DIGITALOCEAN_ACCESS_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_STATE_CONFIG_JSON TF_VAR_guest_password TF_VAR_operator_password TF_VAR_simulator_password; do
+for name in DIGITALOCEAN_ACCESS_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_STATE_CONFIG_JSON TF_VAR_registry_name TF_VAR_guest_password TF_VAR_operator_password TF_VAR_simulator_password; do
   if [[ -z "${!name:-}" ]]; then echo "::error::Missing required deployment setting: $name"; exit 1; fi
 done
+[[ "$TF_VAR_registry_name" =~ ^kth-devops-[a-z0-9-]+$ ]] || { echo '::error::Use a dedicated kth-devops- registry name.'; exit 1; }
+if [[ "$TF_VAR_guest_password" == "$TF_VAR_operator_password" || "$TF_VAR_guest_password" == "$TF_VAR_simulator_password" || "$TF_VAR_operator_password" == "$TF_VAR_simulator_password" ]]; then
+  echo '::error::Use different passwords for guest, operator and simulator.'
+  exit 1
+fi
 for name in TF_VAR_guest_password TF_VAR_operator_password TF_VAR_simulator_password; do
   [[ "${!name}" =~ ^[A-Za-z0-9_-]{24,128}$ ]] || { echo "::error::Invalid password format for $name"; exit 1; }
 done

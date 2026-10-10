@@ -19,4 +19,5 @@ if [[ "$ready" != true ]]; then echo '::error::The expected release did not beco
 url=$(terraform output -raw app_url)
 [[ "$url" == https://* ]] || exit 1
 curl --fail --retry 6 --retry-delay 5 "$url/assets/config.json" -o "$RUNNER_TEMP/public-config.json"
-jq -e '.brokerUrl | startswith("wss://")' "$RUNNER_TEMP/public-config.json" >/dev/null
+broker_url=$(terraform output -raw broker_wss_url)
+jq -e --arg expected "$broker_url" '.brokerUrl == $expected' "$RUNNER_TEMP/public-config.json" >/dev/null

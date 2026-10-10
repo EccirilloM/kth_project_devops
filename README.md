@@ -115,7 +115,7 @@ Diagnostics are in `FE/test-results/lab-diagnostics/` and `FE/test-results/integ
 
 CD packages the checked frontend on `main`. Optional deployment paths publish it to GitHub Pages from `main`, or publish the three tested images to DigitalOcean Container Registry (DOCR) and update App Platform from `dev`. Compiled frontend hashes verify build reuse; only public runtime configuration changes. DigitalOcean deployment uses immutable image digests.
 
-For **Pages**, select **Settings → Pages → Source: GitHub Actions** and configure repository variables `PAGES_DEPLOY_ENABLED=true` and `PAGES_PUBLIC_CONFIG_JSON` using the JSON format above, with the actual broker endpoint and usernames. Pages hosts only the frontend; the broker runs separately. For **DigitalOcean**, follow the [credentials, remote-state migration and deployment instructions](infra/README.md) before enabling `DO_DEPLOY_ENABLED`. With deployment flags unset, CI and frontend delivery on `main` still run.
+For **Pages**, select **Settings → Pages → Source: GitHub Actions** and configure repository variables `PAGES_DEPLOY_ENABLED=true` and `PAGES_PUBLIC_CONFIG_JSON` using the JSON format above, with the actual broker endpoint and usernames. Pages hosts only the frontend; the broker runs separately. For **DigitalOcean**, follow the [account setup, private state and deployment instructions](infra/README.md) before enabling `KTH_DO_DEPLOY_ENABLED`. With deployment flags unset, CI and frontend delivery on `main` still run.
 
 Configure required CI checks and one peer approval through an active GitHub branch ruleset or branch protection. A disabled ruleset does not enforce these requirements.
 

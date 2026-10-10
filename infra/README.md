@@ -1,74 +1,70 @@
-# DigitalOcean deployment and state migration
+# DigitalOcean deployment
 
-The disposable Docker laboratory is in `infra/lab`; it needs no DigitalOcean access. This directory manages the existing persistent demo. CD is disabled unless `DO_DEPLOY_ENABLED=true`, and refuses to run unless `TF_STATE_MIGRATED=true`.
+The disposable test environment is managed by `infra/lab`. This directory manages a separate persistent App Platform demo: frontend, Mosquitto and simulator, with verified images stored in DigitalOcean Container Registry (DOCR). GitHub Pages remains the frontend deployment from `main`.
 
-## Required settings
+## Account and state setup
+
+Use an account/team you control and a dedicated registry name beginning with `kth-devops-`. The workflow uses only the `KTH_` settings below; it does not fall back to another contributor's account, domain or credentials. The app uses DigitalOcean's generated HTTPS domain and TLS termination for `/mqtt`, so a custom domain is unnecessary.
+
+Create a private Spaces Standard bucket separately, disable CDN and keep file listing restricted. Use a bucket-scoped Read/Write/Delete key for Terraform: deletion permission is needed to release its lockfile. Keep this bucket after application teardown until you have finished managing the resources. Enable object versioning through the Spaces S3 API and retain a private recovery copy before relying on the backend for ongoing deployment. Never upload state or plans as public CI artifacts.
 
 GitHub repository **secrets**:
 
 | Name | Purpose |
 | --- | --- |
-| `DIGITALOCEAN_ACCESS_TOKEN` | Manage the existing app and registry; the older `DIGITALOCEAN_TOKEN` name is also accepted. |
-| `GUEST_PASSWORD` | Broker guest credential. |
-| `OPERATOR_PASSWORD` | Broker operator credential. |
-| `SIMULATOR_PASSWORD` | Shared by the simulator and broker configuration. |
-| `TF_STATE_ACCESS_KEY_ID`, `TF_STATE_SECRET_ACCESS_KEY` | Restricted access to the remote state object and its lock. |
+| `KTH_DIGITALOCEAN_ACCESS_TOKEN` | App Platform and registry access in the intended account. |
+| `KTH_TF_STATE_ACCESS_KEY_ID` | Spaces access key ID. |
+| `KTH_TF_STATE_SECRET_ACCESS_KEY` | Spaces secret key. |
+| `KTH_GUEST_PASSWORD` | Read-only broker user. |
+| `KTH_OPERATOR_PASSWORD` | Broker user allowed to send commands. |
+| `KTH_SIMULATOR_PASSWORD` | Shared by the broker configuration and simulator. |
 
-Each broker password must contain 24–128 characters from `A–Z`, `a–z`, digits, `_` and `-`. Generate distinct random values using a password manager. The broker generates its password hashes at startup; no password database is stored in Git or baked into new images. The guest/Guest aliases share the guest password; operator/Staff/staff share the operator password.
+Use three different random broker passwords, each 24–128 characters from letters, digits, `_` and `-`. Guest/Guest aliases share the guest password; operator/Staff/staff share the operator password. Password hashes are generated at container startup, never baked into the image.
 
 GitHub repository **variables**:
 
 | Name | Purpose |
 | --- | --- |
-| `DO_DEPLOY_ENABLED` | Set to `true` only after the migration and checks below. |
-| `TF_STATE_MIGRATED` | Set to `true` only after checking the migrated state. |
-| `TF_STATE_CONFIG_JSON` | Public coordinates of the state backend, as JSON. |
-| `TF_REGISTRY_NAME`, `TF_IMAGE_REPOSITORY` | Exact existing registry and repository names; defaults are `mqtt-emulator-dev` and `mqtt`. Do not guess these values. |
-| `TF_REGION` | Existing app region, default `ams`. |
-| `TF_DOMAIN`, `TF_ZONE`, `TF_PROJECT_NAME` | Preserve the values used by the existing deployment; omit only if those optional resources are absent. |
+| `KTH_DO_DEPLOY_ENABLED` | Leave unset/false until setup is verified. Set `true` to allow cloud CD on `dev`. |
+| `KTH_TF_REGISTRY_NAME` | Globally unique registry name, for example `kth-devops-YOUR-ID`. |
+| `KTH_TF_REGION` | App region; defaults to `ams`. |
+| `KTH_TF_STATE_CONFIG_JSON` | Public backend coordinates. Credentials must not appear here. |
 
-Example backend coordinates (placeholders, not an existing bucket):
+Example Spaces backend configuration (replace the bucket and endpoint):
 
 ```json
 {
-  "bucket": "YOUR_PRIVATE_STATE_BUCKET",
+  "bucket": "YOUR_PRIVATE_BUCKET",
   "key": "kth-devops/demo/terraform.tfstate",
-  "region": "YOUR_STATE_STORAGE_REGION",
-  "encrypt": true
+  "region": "us-east-1",
+  "endpoints": {"s3": "https://ams3.digitaloceanspaces.com"},
+  "skip_credentials_validation": true,
+  "skip_requesting_account_id": true,
+  "skip_metadata_api_check": true,
+  "skip_region_validation": true,
+  "skip_s3_checksum": true
 }
 ```
 
-The backend uses the S3 API with Terraform lockfiles. Use private, durable storage with version recovery, encryption and support for conditional lock creation. A compatible non-AWS endpoint can be supplied in `endpoints.s3` (HTTPS); provider-specific compatibility flags are accepted by the preflight script. Do not assume every S3-compatible service supports Terraform locking: confirm it before migration. The CI does not create the storage or choose an account.
+Here `region` is an S3 compatibility setting; the endpoint selects the actual Amsterdam storage location. Terraform 1.13.3 uses `use_lockfile=true` from `backend.tf`. The compatibility flags do not disable TLS certificate verification. See the [official Spaces backend documentation](https://docs.digitalocean.com/products/spaces/reference/terraform-backend/).
 
-Credentials are supplied through environment variables, never in this JSON. Terraform 1.13.3 is used for the workflow and maintenance container. Keep the provider lockfile produced during initialization in Git after verifying it.
+## First deployment to a new account
 
-## Migrate the existing state once
+1. Verify the account, bucket privacy and recovery setup. Do not use bootstrap to replace lost state from an existing deployment.
+2. Configure the secrets and variables above. Review costs before enabling CD: three `apps-s-1vcpu-0.5gb` components, a Starter registry and Spaces storage. Check current quotas and prices in the provider console.
+3. Publish the reviewed workflows to `main` (to expose manual dispatch) and `dev`. In **Actions → CI → Run workflow**, choose **dev** and enable **bootstrap-cloud**. All CI checks run before cloud provisioning; no older artifact is substituted.
+4. If the app address is absent, the workflow permits only empty state or registry-only state. It refuses an existing app with the requested name or an untracked registry. Terraform creates the registry using only `registry.tf` and `backend.tf` in a temporary working directory, sharing the same backend key and resource address as the full configuration.
+5. CD uploads the three images verified by this CI run, resolves their digests, then creates the app using those digests. No dummy image references or mutable release tags are deployed. A partial first run can resume with the explicit bootstrap option; if an app exists without its state, recover the state first.
+6. Inspect the release summary, then test guest/operator login, visible telemetry and recording controls at the reported UI URL. Deployment success checks the active image digests and exact public broker configuration; it does not replace this remote MQTT verification.
 
-Coordinate this with the infrastructure owner; do not run a new apply against an empty state.
+Subsequent pushes to `dev` update the app after CI passes. They require the registry and app in state, reject deletion/replacement, and do not recreate missing cloud resources. Deployments are serialized and Terraform uses backend locks. Do not manually cancel an apply. State and plan files remain private on the runner; only image references are uploaded.
 
-1. Freeze DigitalOcean deployments while migrating. Keep `DO_DEPLOY_ENABLED` unset/false in the corrected workflow, and prevent older workflow runs from applying changes.
-2. Recover the **latest successful Terraform state** privately from the existing working copy or the old CI cache. Check its lineage, serial and app/registry IDs against DigitalOcean. Keep a secure backup; do not put it in Git, a chat or a public artifact.
-3. Prepare the private remote backend and verify access, encryption, version recovery and lock support.
-4. Put the verified state at `infra/terraform.tfstate` and backend coordinates at `.runtime/backend.json` (both ignored). Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your local terminal, using the state-storage credentials.
-5. From the repository root, migrate with the containerized CLI:
+The bootstrap root is derived from the same `registry.tf`, not a second copy of the registry definition. `ci/verify-infra.sh` validates both roots and the Docker laboratory. CI also tests the plan gate with synthetic update, creation, deletion and replacement plans. Keep reviewed provider lockfiles in Git after initialization.
 
-```sh
-docker compose -f Docker/terraform.compose.yaml run --rm terraform init -migrate-state -backend-config=/workspace/.runtime/backend.json
-docker compose -f Docker/terraform.compose.yaml run --rm terraform state list
-```
+## Existing deployments and recovery
 
-Review the migration prompt rather than forcing it. The state must still contain `digitalocean_app.mqtt` and `digitalocean_container_registry.mqtt`, plus any existing DNS/project resources. Verify that the remote state has the same resource identities. Do not delete the only copy of a state file.
+Never point a fresh token at another account's state or run bootstrap to bypass a missing-state error. Freeze all writers, recover the latest state privately, and verify its resource IDs and lineage against the intended account. Back it up before migrating with `terraform init -migrate-state` using the containerized CLI in `Docker/terraform.compose.yaml`. Check `terraform state list` and a reviewed plan before resuming. The current automated cloud job intentionally uses the new account's `KTH_` settings only; adopting an older deployment requires deliberate configuration and state review.
 
-6. Rotate the old demo credentials and configure the new GitHub secrets above. The first corrected deployment updates both broker and simulator credentials together; existing demo users need the new passwords.
-7. Remove the old Terraform-state caches once the remote copy and private backup are verified. Sensitive data in previous caches must be treated as potentially exposed; deleting a cache does not revoke credentials.
-8. Set the public variables to match the actual resources, set `TF_STATE_MIGRATED=true`, then enable `DO_DEPLOY_ENABLED=true`. Integrate the reviewed code and examine the deployment plan. The workflow refuses automatic resource deletion/replacement.
+## GitHub Pages
 
-The repository no longer restores or saves Terraform state through Actions cache and no longer automatically adopts whichever registry/app it finds. Backend migration, storage provisioning and credential rotation are operator actions, not actions already performed by these changes.
-
-## Release behavior
-
-CI verifies the frontend build, runtime image, broker, simulator and isolated integration environment. CD loads those same images, publishes unique release tags to DOCR and sets all three service image digests in one Terraform update. Stable tags are not overwritten and `deploy_on_push` is disabled; App Platform cannot begin a partial release while images are still being published.
-
-The deployment waits for an active app deployment containing the expected digests and checks the public frontend configuration. The summary and release artifact contain image references, not credentials. Real login and remote telemetry should also be checked after the first migration.
-
-State locks and serialized deployments protect against overlapping infrastructure writes. New pushes do not cancel in-progress CI/CD runs on `dev` or `main`. Manual cancellation can still interrupt work and should be avoided during an apply.
+After verifying the public broker, configure `PAGES_PUBLIC_CONFIG_JSON` with its WSS endpoint and the application's public usernames. Enable `PAGES_DEPLOY_ENABLED` and release through `main`. Pages reuses the validated frontend build and supplies public configuration separately at runtime. Broker passwords never belong in this configuration.
