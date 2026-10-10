@@ -20,8 +20,23 @@ for attempt in $(seq 1 60); do
 done
 if [[ "$ready" != true ]]; then echo '::error::The expected release did not become active within ten minutes.'; exit 1; fi
 bash "$(dirname "$0")/verify-registry-tags.sh"
-url=$(terraform output -raw app_url)
-[[ "$url" == https://* ]] || exit 1
-curl --fail --retry 6 --retry-delay 5 "$url/assets/config.json" -o "$RUNNER_TEMP/public-config.json"
+# Terraform may save live_url before the first asynchronous deployment becomes
+# active. Read the URL from the same fresh API response checked above.
+url=$(jq -r '(if type == "array" then .[0] else . end) | .live_url // empty' <<< "$app")
+if [[ ! "$url" =~ ^https://[^/[:space:]?#@]+/?$ ]]; then
+  echo '::error::The active app did not provide a valid public HTTPS URL.' >&2
+  exit 1
+fi
+url=${url%/}
+if ! curl --fail --retry 6 --retry-delay 5 --connect-timeout 10 --max-time 30 \
+  "$url/assets/config.json" -o "$RUNNER_TEMP/public-config.json"; then
+  echo '::error::The deployed frontend runtime configuration could not be retrieved.' >&2
+  exit 1
+fi
 broker_url=$(terraform output -raw broker_wss_url)
-jq -e --arg expected "$broker_url" '.brokerUrl == $expected' "$RUNNER_TEMP/public-config.json" >/dev/null
+if ! jq -e --arg expected "$broker_url" '.brokerUrl == $expected' "$RUNNER_TEMP/public-config.json" >/dev/null; then
+  echo '::error::The frontend runtime configuration does not match the expected broker URL.' >&2
+  exit 1
+fi
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then printf 'app_url=%s\n' "$url" >> "$GITHUB_OUTPUT"; fi
+echo 'The active release serves the expected public runtime configuration.'

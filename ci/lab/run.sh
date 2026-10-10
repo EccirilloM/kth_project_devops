@@ -10,14 +10,13 @@ export KTH_REPO_ROOT="$root"
 export KTH_FRONTEND_DIR="$root/FE/dist/sail-monitoring-web/browser"
 export KTH_RUNTIME_DIR="$root/.runtime/$KTH_ENVIRONMENT_ID"
 export KTH_DIAGNOSTICS_DIR="$root/FE/test-results/lab-diagnostics"
-adapter=${KTH_LAB_ADAPTER:-"$root/ci/lab/adapter.sh"}
 image=kth-devops-checks-checks:latest
 mkdir -p "$KTH_RUNTIME_DIR" "$KTH_DIAGNOSTICS_DIR" "$root/FE/test-results"
 umask 077
 
 adapter_operation() {
   # Terraform output/plans may contain credentials. Preserve privately, not in CI logs.
-  if ! bash "$adapter" "$1" > "$KTH_RUNTIME_DIR/$1.log" 2>&1; then
+  if ! bash "$root/ci/lab/adapter.sh" "$1" > "$KTH_RUNTIME_DIR/$1.log" 2>&1; then
     echo "Laboratory adapter operation '$1' failed. Its private log is in .runtime; do not upload it unredacted." >&2
     return 1
   fi

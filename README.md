@@ -100,6 +100,8 @@ Terraform's Docker provider provisions an isolated network, the checked frontend
 
 Scenarios cover telemetry and recording, malformed messages, stale data, broker restart recovery and broker-enforced guest command denial. Browser certificate verification stays enabled. The idempotence checker permits only documented null-to-empty refresh differences in selected Docker-provider fields; planned changes and other drift fail.
 
+This idempotence check covers the **Docker laboratory**, as specified in the proposal; it does not check DigitalOcean resources. The flow is `up → plan → second apply → plan → MQTT tests → logs → down`. `ci/lab/run.sh` coordinates these steps, `adapter.sh` runs the container tools, and `terraform.sh` runs Terraform inside the tooling container.
+
 Diagnostics are in `FE/test-results/lab-diagnostics/` and `FE/test-results/integration/`. Private state, plans and certificates stay under ignored `.runtime/<environment-id>/`. Never commit or share these files. If teardown fails, preserve the environment ID and state, set `KTH_ENVIRONMENT_ID` to that ID and run `bash ci/lab/run.sh down` from Git Bash/macOS. The laboratory never targets the shared demo broker.
 
 ## CI/CD and quality gates

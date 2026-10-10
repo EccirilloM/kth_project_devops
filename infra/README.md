@@ -2,6 +2,8 @@
 
 The disposable test environment is managed by `infra/lab`. This directory manages a separate persistent App Platform demo: frontend, Mosquitto and simulator, with verified images stored in DigitalOcean Container Registry (DOCR). GitHub Pages remains the frontend deployment from `main`.
 
+Routine cloud delivery follows `preflight → initialize state → publish tested images → plan/apply → verify release`. Bootstrap and app recovery are exceptional, explicit operations; leave both manual inputs at their defaults for normal deployments. The CI laboratory's second-apply check does not establish cloud idempotence.
+
 ## Account and state setup
 
 Use an account/team you control and a dedicated registry name beginning with `kth-devops-`. The workflow uses only the `KTH_` settings below; it does not fall back to another contributor's account, domain or credentials. The app uses DigitalOcean's generated HTTPS domain and TLS termination for `/mqtt`, so a custom domain is unnecessary.

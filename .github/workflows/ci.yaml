@@ -138,12 +138,7 @@ jobs:
             --mount "type=bind,source=$GITHUB_WORKSPACE/simulator/test,target=/app/test,readonly" \
             "$SIMULATOR_IMAGE" node --test test/model.test.mjs
       - name: Save the tested image without rebuilding it
-        run: |
-          mkdir -p "$RUNNER_TEMP/simulator-image"
-          docker image inspect "$SIMULATOR_IMAGE" --format '{{.Id}}' > "$RUNNER_TEMP/simulator-image/image.id"
-          docker save "$SIMULATOR_IMAGE" --output "$RUNNER_TEMP/simulator-image/image.tar"
-          cd "$RUNNER_TEMP/simulator-image"
-          sha256sum image.tar > image.sha256
+        run: bash ci/images.sh save "$SIMULATOR_IMAGE" "$RUNNER_TEMP/simulator-image"
       - name: Store the tested simulator image
         uses: actions/upload-artifact@v4
         with:
@@ -265,9 +260,9 @@ jobs:
           path: ${{ runner.temp }}/runtime-images
       - name: Load the exact images produced by CI
         run: |
-          bash ci/images.sh load "$KTH_FRONTEND_IMAGE" "$RUNNER_TEMP/runtime-images/frontend-image-$GITHUB_SHA"
-          bash ci/images.sh load "$KTH_BROKER_IMAGE" "$RUNNER_TEMP/runtime-images/broker-image-$GITHUB_SHA"
-          bash ci/images.sh load "$KTH_SIMULATOR_IMAGE" "$RUNNER_TEMP/runtime-images/simulator-image-$GITHUB_SHA"
+          for component in frontend broker simulator; do
+            bash ci/images.sh load "kth-devops-$component:$GITHUB_SHA" "$RUNNER_TEMP/runtime-images/$component-image-$GITHUB_SHA"
+          done
       - name: Validate and provision the disposable Terraform laboratory
         id: provision
         run: bash ci/lab/run.sh up

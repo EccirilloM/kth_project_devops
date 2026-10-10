@@ -173,12 +173,15 @@ jobs:
           bash ../ci/deploy/check-plan.sh "$RUNNER_TEMP/deploy-plan.json"
           terraform apply -input=false "$RUNNER_TEMP/deploy.tfplan"
       - name: Verify that the deployed frontend answers
+        id: verify-release
         run: bash ../ci/deploy/verify-release.sh
       - name: Publish release references
+        env:
+          DEPLOYED_APP_URL: ${{ steps.verify-release.outputs.app_url }}
         run: |
           {
             echo '### DigitalOcean release'
-            printf '\nUI: %s\n' "$(terraform output -raw app_url)"
+            printf '\nUI: %s\n' "$DEPLOYED_APP_URL"
             printf '\nBroker: %s\n' "$(terraform output -raw broker_wss_url)"
             cat "$RUNNER_TEMP/release/images.env"
           } >> "$GITHUB_STEP_SUMMARY"
