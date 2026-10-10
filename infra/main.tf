@@ -3,6 +3,16 @@ variable "image_repository" {
   default = "mqtt"
 }
 
+variable "image_release" {
+  description = "CI commit, run ID and attempt used for unique DOCR tags. Empty retains digest sources for older deployments and imports."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.image_release == "" || can(regex("^[a-f0-9]{40}-[0-9]+-[0-9]+$", var.image_release))
+    error_message = "Use the CI commit-run-attempt release identifier."
+  }
+}
+
 variable "mosquitto_digest" {
   type = string
   validation {
@@ -134,10 +144,11 @@ resource "digitalocean_app" "mqtt" {
       http_port          = 80
 
       image {
-        # DOCR uses the account's single registry; the registry field must be omitted.
         registry_type = "DOCR"
+        registry      = var.registry_name
         repository    = var.image_repository
-        digest        = var.frontend_digest
+        tag           = var.image_release != "" ? "frontend-${var.image_release}" : null
+        digest        = var.image_release == "" ? var.frontend_digest : null
         deploy_on_push {
           enabled = false
         }
@@ -182,8 +193,10 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
+        registry      = var.registry_name
         repository    = var.image_repository
-        digest        = var.mosquitto_digest
+        tag           = var.image_release != "" ? "mosquitto-${var.image_release}" : null
+        digest        = var.image_release == "" ? var.mosquitto_digest : null
         deploy_on_push {
           enabled = false
         }
@@ -197,8 +210,10 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
+        registry      = var.registry_name
         repository    = var.image_repository
-        digest        = var.simulator_digest
+        tag           = var.image_release != "" ? "simulator-${var.image_release}" : null
+        digest        = var.image_release == "" ? var.simulator_digest : null
         deploy_on_push {
           enabled = false
         }

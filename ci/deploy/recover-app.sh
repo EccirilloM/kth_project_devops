@@ -26,7 +26,12 @@ jq -e --arg id "$app_id" --arg name "$TF_VAR_app_name" --arg region "$TF_VAR_reg
     all(.spec.services[], .spec.workers[];
       .image.registry_type == "DOCR" and .image.repository == $repo and
       ((.image.registry // "") == "" or .image.registry == $registry) and
-      ((.image.digest // "") | test("^sha256:[a-f0-9]{64}$"))))
+      (if (.image.tag // "") == "" then
+        ((.image.digest // "") | test("^sha256:[a-f0-9]{64}$"))
+      else
+        (.image.digest // "") == "" and
+        (. as $component | .image.tag | test("^" + $component.name + "-[a-f0-9]{40}-[0-9]+-[0-9]+$"))
+      end)))
 ' "$RUNNER_TEMP/recovery-app.json" >/dev/null || fail 'App identity, region, components or image sources do not match the recovery target.'
 
 if jq -e --arg id "$app_id" 'any(.values.root_module.resources[]; .address == "digitalocean_app.mqtt" and .values.id == $id)' "$RUNNER_TEMP/cloud-state.json" >/dev/null; then
@@ -35,11 +40,24 @@ if jq -e --arg id "$app_id" 'any(.values.root_module.resources[]; .address == "d
 fi
 
 # Import needs all required variables, even though it does not apply the config.
-# Read the existing digests; the subsequent release still uses only CI's images.
+# Resolve older digest sources and unique release tags before import.
+# The subsequent release still uses only CI's verified images.
 export TF_VAR_frontend_digest TF_VAR_mosquitto_digest TF_VAR_simulator_digest
-TF_VAR_frontend_digest=$(jq -er '.[0].spec.services[] | select(.name == "frontend") | .image.digest' "$RUNNER_TEMP/recovery-app.json")
-TF_VAR_mosquitto_digest=$(jq -er '.[0].spec.services[] | select(.name == "mosquitto") | .image.digest' "$RUNNER_TEMP/recovery-app.json")
-TF_VAR_simulator_digest=$(jq -er '.[0].spec.workers[] | select(.name == "simulator") | .image.digest' "$RUNNER_TEMP/recovery-app.json")
+tags='[]'
+if jq -e 'any(.[0].spec.services[], .[0].spec.workers[]; (.image.tag // "") != "")' "$RUNNER_TEMP/recovery-app.json" >/dev/null; then
+  tags=$(doctl registry repository list-tags "$TF_VAR_image_repository" --registry "$TF_VAR_registry_name" -o json)
+fi
+for component in frontend mosquitto simulator; do
+  digest=$(jq -er --arg name "$component" --argjson tags "$tags" '
+    (.[0].spec | .services[], .workers[]) | select(.name == $name) | .image |
+    if (.tag // "") == "" then .digest else
+      .tag as $tag | [$tags[] | select(.tag == $tag)] |
+      if length == 1 then .[0].manifest_digest else error("Release tag not uniquely resolved") end
+    end
+  ' "$RUNNER_TEMP/recovery-app.json")
+  [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || fail 'Invalid digest in the registry catalog.'
+  export "TF_VAR_${component}_digest=$digest"
+done
 # Remote bucket versioning retains the preceding version. This additional copy
 # and API response remain private on the runner and are never uploaded/logged.
 terraform state pull > "$RUNNER_TEMP/pre-import.tfstate"

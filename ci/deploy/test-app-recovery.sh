@@ -14,9 +14,14 @@ export MOCK_API_STATUS=0
 # Neither executable contacts a cloud service or invokes a real Terraform CLI.
 cat > "$test_dir/bin/doctl" <<'MOCK'
 #!/bin/bash
-[[ "$*" == "apps get $KTH_RECOVER_APP_ID -o json" ]] || exit 99
 [[ "$MOCK_API_STATUS" == 0 ]] || exit "$MOCK_API_STATUS"
-cat "$RUNNER_TEMP/app-fixture.json"
+case "$*" in
+  "apps get $KTH_RECOVER_APP_ID -o json") cat "$RUNNER_TEMP/app-fixture.json" ;;
+  "registry repository list-tags mqtt --registry kth-devops-test -o json")
+    jq '[.[0].spec | .services[], .workers[] | select(.image.tag != null) |
+      {tag:.image.tag,manifest_digest:("sha256:" + ("a" * 64))}]' "$RUNNER_TEMP/app-fixture.json" ;;
+  *) exit 99 ;;
+esac
 MOCK
 cat > "$test_dir/bin/terraform" <<'MOCK'
 #!/bin/bash
@@ -60,6 +65,9 @@ check_case() {
 }
 check_case 'matching app is imported with private backup and real digests' '.' '.' import
 check_case 'omitted DOCR registry is accepted' '.[0].spec.services[].image |= del(.registry) | .[0].spec.workers[].image |= del(.registry)' '.' import
+check_case 'unique release tags are resolved before import' '(.[0].spec.services[], .[0].spec.workers[]) |= (.image.tag = (.name + "-" + ("a" * 40) + "-123-1") | del(.image.digest))' '.' import
+check_case 'mutable latest tag is rejected' '.[0].spec.services[0].image |= (del(.digest) | .tag = "latest")' '.' fail
+check_case 'tag and digest together are rejected' '.[0].spec.services[0].image.tag = ("frontend-" + ("a" * 40) + "-123-1")' '.' fail
 check_case 'different app ID is rejected' '.[0].id = "22222222-2222-2222-2222-222222222222"' '.' fail
 check_case 'different app name is rejected' '.[0].spec.name = "other"' '.' fail
 check_case 'different region is rejected' '.[0].spec.region = "nyc"' '.' fail

@@ -182,6 +182,8 @@ jobs:
         run: bash ci/deploy/test-registry-bootstrap.sh
       - name: Verify app recovery guards without cloud access
         run: bash ci/deploy/test-app-recovery.sh
+      - name: Verify release references without cloud access
+        run: bash ci/deploy/test-release-checks.sh
       - uses: actions/download-artifact@v4
         with:
           name: frontend-checked-${{ github.sha }}
