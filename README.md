@@ -129,7 +129,3 @@ Test reports and build artifacts are available under **Actions → Summary → A
 The live demo relies on GitHub Pages, DigitalOcean App Platform and DigitalOcean Container Registry (DOCR), while the map loads OpenStreetMap tiles. Building and testing also requires container registries and npm; CI uses Google's public Docker Hub cache to reduce download failures.
 
 The simulator represents a subset of the boat's behaviour. Its tests help us check changes without hardware, but they cannot reproduce every condition on the real boat. Similarly, the security checks detect specific classes of problems rather than guarantee that the application has no vulnerabilities.
-
-## AI assistance
-
-AI tools supported code review, troubleshooting and conceptual discussions, as well as frontend simplification and workflow/test implementation. The authors are responsible for reviewing changes and validating them through the project checks.
