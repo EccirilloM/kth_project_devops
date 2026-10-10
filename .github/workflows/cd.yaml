@@ -151,6 +151,7 @@ jobs:
           terraform_wrapper: false
       - uses: digitalocean/action-doctl@v2
         with:
+          version: 1.178.0
           token: ${{ env.DIGITALOCEAN_ACCESS_TOKEN }}
       - name: Initialize state and explicitly bootstrap when requested
         run: bash ../ci/deploy/initialize.sh

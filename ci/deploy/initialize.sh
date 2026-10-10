@@ -30,13 +30,7 @@ if ! grep -qx "$app_address" "$RUNNER_TEMP/state-addresses.txt"; then
     exit 1
   }
   if ! grep -qx "$registry_address" "$RUNNER_TEMP/state-addresses.txt"; then
-    if doctl registry get -o json > "$RUNNER_TEMP/registry.json" 2> "$RUNNER_TEMP/registry-error.txt"; then
-      echo '::error::This account already has a registry outside this state. Refusing automatic adoption.'
-      exit 1
-    elif ! grep -q '404' "$RUNNER_TEMP/registry-error.txt"; then
-      echo '::error::Cannot verify that the account has no registry. Check API permissions and availability.'
-      exit 1
-    fi
+    bash "$(dirname "$0")/require-empty-registry.sh"
   fi
 
   # Create the registry before pushing images, without placeholder app digests.
