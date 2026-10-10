@@ -15,11 +15,11 @@ import { TOPICS } from './topics';
 type JsonObject = Record<string, unknown>;
 const markTypes = [MarkType.COMITATO, MarkType.PIN, MarkType.BOLINA];
 export function object(value: unknown): JsonObject {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Oggetto JSON non valido');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid JSON object');
   return value as JsonObject;
 }
 function finite(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Numero non valido');
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('Invalid number');
   return value;
 }
 function numeric(value: unknown, keys: string[]): JsonObject {
@@ -30,7 +30,7 @@ function numeric(value: unknown, keys: string[]): JsonObject {
   return data;
 }
 function coordinates(lat: unknown, lon: unknown): void {
-  if (Math.abs(finite(lat)) > 90 || Math.abs(finite(lon)) > 180) throw new Error('Coordinate non valide');
+  if (Math.abs(finite(lat)) > 90 || Math.abs(finite(lon)) > 180) throw new Error('Invalid coordinates');
 }
 
 export function dashboardPayload(value: unknown): DashboardData {
@@ -57,7 +57,7 @@ export function mapPayload(value: unknown): MapData {
 }
 export function indicatorsPayload(value: unknown): IndicatorsState {
   const data = object(value);
-  if (!Array.isArray(data['indicators'])) throw new Error('Indicatori non validi');
+  if (!Array.isArray(data['indicators'])) throw new Error('Invalid indicators');
   const result = {} as IndicatorsState;
   for (const raw of data['indicators']) {
     const item = object(raw);
@@ -71,7 +71,7 @@ export function indicatorsPayload(value: unknown): IndicatorsState {
 }
 export function recordingPayload(value: unknown): RecordingState {
   const data = object(value);
-  if (typeof data['recording'] !== 'boolean') throw new Error('Stato registrazione non valido');
+  if (typeof data['recording'] !== 'boolean') throw new Error('Invalid recording state');
   return {
     recording: data['recording'],
     lastError: typeof data['last_error'] === 'string' ? data['last_error'] : undefined,
@@ -84,21 +84,21 @@ export function commandPayload(command: ClientCommandUnion): {topic: string; pay
       const mark = command.payload.mark;
       coordinates(mark.lat, mark.lon);
       const type = markTypes.indexOf(mark.type);
-      if (type < 0) throw new Error('Tipo di boa non valido');
+      if (type < 0) throw new Error('Invalid mark type');
       return {topic: TOPICS.setMark, payload: {type, lat: mark.lat, lon: mark.lon}};
     }
     case ClientCommandType.Update: {
       const {indicator, method} = command.payload;
       if (!Object.values(IndicatorType).includes(indicator) || !Object.values(MethodType).includes(method)) {
-        throw new Error('Regolazione non valida');
+        throw new Error('Invalid adjustment');
       }
       const toggle = indicator === IndicatorType.ACTIVE_SENSOR || indicator === IndicatorType.ACTUATION_MODE;
-      if (toggle !== (method === MethodType.CHANGE)) throw new Error('Operazione non valida per questo indicatore');
+      if (toggle !== (method === MethodType.CHANGE)) throw new Error('Invalid operation for this indicator');
       return {topic: TOPICS.update, payload: {indicator, method}};
     }
     case ClientCommandType.TestCommand:
-      if (!Object.values(TestFlapCommand).includes(command.payload.command)) throw new Error('Test non valido');
+      if (!Object.values(TestFlapCommand).includes(command.payload.command)) throw new Error('Invalid test command');
       return {topic: TOPICS.testServo, payload: {command: command.payload.command}};
-    default: throw new Error('Comando non supportato');
+    default: throw new Error('Unsupported command');
   }
 }

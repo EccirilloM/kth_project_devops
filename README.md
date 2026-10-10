@@ -6,13 +6,13 @@ Reproducible testing and secure delivery for an Angular MQTT application, based 
 
 The browser connects directly to an MQTT broker over secure WebSockets (WSS), displaying boat telemetry and a map with role-dependent recording controls. A synthetic boat simulator and a real Mosquitto broker make testing possible without the physical boat.
 
-This README explains setup and verification. Architecture, design choices and limitations belong in the separate [project report](https://github.com/EccirilloM/DevOps_Project_Report). Application code is in `FE/`, the simulator in `simulator/`, infrastructure in `infra/`, and container tooling and automation in `Docker/` and `ci/`.
+Code: `FE/` (frontend), `simulator/`, `infra/` (Terraform), `Docker/` and `ci/` (tooling). See the [project report](https://github.com/EccirilloM/DevOps_Project_Report) for architecture, design choices and limitations.
 
 ## Live application
 
-Open the [GitHub Pages frontend](https://eccirillom.github.io/kth_project_devops/). It connects to the demo broker at `wss://kth-devops-sailing-hryqr.ondigitalocean.app/mqtt`; the broker and simulator run on DigitalOcean. The [App Platform frontend](https://kth-devops-sailing-hryqr.ondigitalocean.app/) provides another entry point to the same demo. Use `guest` for telemetry or `operator` for recording controls, with credentials obtained privately from the authors. Passwords are never included in the website configuration.
+Open the [GitHub Pages frontend](https://eccirillom.github.io/kth_project_devops/) or the [App Platform frontend](https://kth-devops-sailing-hryqr.ondigitalocean.app/). Both use the DigitalOcean broker at `wss://kth-devops-sailing-hryqr.ondigitalocean.app/mqtt` and its simulator. Use `guest` for telemetry or `operator` for recording controls; obtain credentials privately from the authors.
 
-[CI run #65, attempt 2](https://github.com/EccirilloM/kth_project_devops/actions/runs/38052448425/attempts/2) passed all five CI jobs and deployed Pages. A manual check on 10 October 2026 confirmed guest sign-in and changing telemetry on Pages; operator start/stop recording was checked through the App Platform frontend. These are deployment observations, not continuous availability guarantees.
+[Run #65, attempt 2](https://github.com/EccirilloM/kth_project_devops/actions/runs/38052448425/attempts/2) passed CI and deployed Pages. On 10 October 2026, manual checks confirmed guest telemetry on Pages and operator recording controls on App Platform.
 
 ## Requirements
 
@@ -71,7 +71,7 @@ docker compose -f Docker/checks.compose.yaml run --rm simulator-checks
 docker compose -f Docker/checks.compose.yaml run --rm simulator-image-test
 ```
 
-These commands need no live broker. They cover lint, TypeScript, unit/contract tests, dependency auditing, the production build and browser startup tests. Controlled lint violations and nonfunctional tokens demonstrate the ESLint and Gitleaks gates. Rebuild checking images after source or dependency changes.
+These checks need no live broker. They include lint, types, unit tests, audit, build, browser startup and controlled ESLint/Gitleaks gate demonstrations. Rebuild checking images after source or dependency changes.
 
 Then test the actual Nginx frontend image using the build just produced:
 
@@ -102,13 +102,13 @@ bash ci/lab/check.sh
 
 PowerShell users can run `./ci/lab/check.ps1`.
 
-Terraform's Docker provider provisions an isolated network, the checked frontend, Mosquitto with authentication and topic ACLs, and the simulator. The script generates temporary credentials and TLS certificates, checks no-change plans before and after a second apply, runs [browser/broker E2E tests](FE/e2e/integration/broker.spec.ts), collects diagnostics and attempts teardown even after failures.
+Terraform's Docker provider provisions an isolated network, the checked frontend, Mosquitto with topic ACLs, and the simulator. The script generates temporary credentials and TLS certificates, checks plans before and after a second apply, runs [MQTT E2E tests](FE/e2e/integration/broker.spec.ts), collects diagnostics and attempts teardown even after failures.
 
-Scenarios cover telemetry and recording, malformed messages, stale data, broker restart recovery and broker-enforced guest command denial. Browser certificate verification stays enabled. The idempotence checker permits only documented null-to-empty refresh differences in selected Docker-provider fields; planned changes and other drift fail.
+Scenarios cover telemetry, recording, malformed messages, stale data, broker restart and guest command denial. TLS verification stays enabled. Idempotence permits only documented null-to-empty refreshes in selected Docker-provider fields; planned changes and other drift fail.
 
-This idempotence check covers the **Docker laboratory**, as specified in the proposal; it does not check DigitalOcean resources. The flow is `up → plan → second apply → plan → MQTT tests → logs → down`. `ci/lab/run.sh` coordinates these steps, `adapter.sh` runs the container tools, and `terraform.sh` runs Terraform inside the tooling container.
+Idempotence covers the **Docker laboratory**, not DigitalOcean. The flow in `ci/lab/run.sh` is `up → plan → second apply → plan → MQTT tests → logs → down`.
 
-Diagnostics are in `FE/test-results/lab-diagnostics/` and `FE/test-results/integration/`. Private state, plans and certificates stay under ignored `.runtime/<environment-id>/`. Never commit or share these files. If teardown fails, preserve the environment ID and state, set `KTH_ENVIRONMENT_ID` to that ID and run `bash ci/lab/run.sh down` from Git Bash/macOS. The laboratory never targets the shared demo broker.
+Diagnostics: `FE/test-results/lab-diagnostics/` and `FE/test-results/integration/`. Private state, plans and certificates stay in ignored `.runtime/<environment-id>/`; do not share them. If teardown fails, preserve that directory, set `KTH_ENVIRONMENT_ID` to its environment ID and run `bash ci/lab/run.sh down` from Git Bash/macOS. The shared demo broker is never targeted.
 
 ## CI/CD and quality gates
 
@@ -140,7 +140,7 @@ In each run's **Actions → Summary → Artifacts**, diagnostics are retained fo
 
 GitHub hosts the repository, automation and Pages frontend; DigitalOcean App Platform and DOCR support the persistent demo. The map uses OpenStreetMap tiles. Container registries and npm supply tools, dependencies and vulnerability data.
 
-GitHub runners check [Google's public Docker Hub cache](https://cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images) first, keeping the same image names and versions. No Google account or Docker Hub token is required. Cache misses fall back to Docker Hub and remain subject to its availability and limits. Secret scanning pulls Gitleaks from GHCR. Recognized temporary image-download failures get at most three attempts; test failures are never retried automatically. Local commands use the existing Docker Desktop settings.
+CI uses [Google's public Docker Hub cache](https://cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images), falling back to Docker Hub, and pulls Gitleaks from GHCR. No Google account or Docker Hub token is required. Temporary image-download failures get at most three attempts; test failures are not retried. Local commands use Docker Desktop settings.
 
 Telemetry is synthetic and covers a defined command subset, not the full boat electronics. Passing laboratory tests does not prove the external deployment is healthy, and automated security scans do not guarantee the absence of vulnerabilities.
 

@@ -146,7 +146,7 @@ test('recording timeout never invents a stopped state or resends the command', a
   t.mock.timers.tick(APP_CONFIG.commandTimeoutMs + 1);
   assert.equal(session.recording$.value, null);
   assert.equal(session.pending$.value, false);
-  assert.match(session.feedback$.value, /sconosciuto/);
+  assert.match(session.feedback$.value, /outcome unknown/);
   assert.equal(client.published.length, 1);
 });
 test('ROS failure and publication failure require a fresh state before retrying', async t => {
@@ -173,7 +173,7 @@ test('outage discards commands, clears old data and reconnects using a fresh cli
   assert.equal(session.recording$.value, null);
   assert.equal(old.options.password, undefined);
   assert.equal(session.connection$.value.status, MqttConnectionState.RECONNECTING);
-  assert.match(session.feedback$.value, /esito sconosciuto/);
+  assert.match(session.feedback$.value, /outcome unknown/);
   t.mock.timers.tick(APP_CONFIG.reconnectMs);
   const fresh = clients[1];
   assert.notEqual(fresh.options.clientId, old.options.clientId);
@@ -181,7 +181,7 @@ test('outage discards commands, clears old data and reconnects using a fresh cli
   assert.equal(fresh.options.queueQoSZero, false);
   fresh.accept(); fresh.acknowledgeSubscription!();
   assert.equal(session.connection$.value.status, MqttConnectionState.CONNECTED);
-  assert.match(session.feedback$.value, /esito sconosciuto/);
+  assert.match(session.feedback$.value, /outcome unknown/);
   assert.equal(fresh.published.length, 0);
   old.message(TOPICS.recording, {recording: true});
   assert.equal(session.recording$.value, null);
@@ -191,7 +191,7 @@ test('unauthorized DISCONNECT ends only this session and does not loop reconnect
   const client = await login();
   client.emit('disconnect', {reasonCode: 0x87});
   assert.equal(session.role$.value, null);
-  assert.match(session.feedback$.value, /rifiutato/);
+  assert.match(session.feedback$.value, /rejected/);
   t.mock.timers.tick(APP_CONFIG.reconnectMs * 3);
   assert.equal(clients.length, 1);
 });

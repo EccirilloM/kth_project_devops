@@ -50,8 +50,8 @@ export class MqttSession {
     this.logout();
     const name = username.trim();
     const role = roleForUsername(name, this.config);
-    if (!role) throw new Error('Utente non configurato per questa applicazione.');
-    if (!password) throw new Error('Inserisci la password.');
+    if (!role) throw new Error('User is not configured for this application.');
+    if (!password) throw new Error('Enter your password.');
     this.credentials = {url: brokerUrl(this.config.brokerUrl), username: name, password, role};
     return new Promise<void>((resolve, reject) => {
       this.resolveLogin = resolve;
@@ -73,7 +73,7 @@ export class MqttSession {
     this.role$.next(null);
     this.feedback$.next('');
     this.setState(State.DISCONNECTED);
-    reject?.(new Error('Accesso annullato.'));
+    reject?.(new Error('Sign-in cancelled.'));
   }
 
   destroy(): void { this.logout(); clearInterval(this.expiryTimer); }
@@ -91,13 +91,13 @@ export class MqttSession {
         connectTimeout: this.config.connectTimeoutMs, queueQoSZero: false,
         resubscribe: false, keepalive: 30, properties: {sessionExpiryInterval: 0},
       });
-    } catch { this.fail('Impossibile aprire la connessione al broker.'); return; }
+    } catch { this.fail('Unable to connect to the broker.'); return; }
     this.client = client;
     const current = () => this.client === client;
     this.deadline = setTimeout(() => {
       if (!current()) return;
       if (this.role$.value) this.connectionLost();
-      else this.fail('Broker non raggiungibile o connessione scaduta.');
+      else this.fail('Broker unreachable or connection timed out.');
     }, this.config.connectTimeoutMs);
 
     client.on('connect', () => {
@@ -108,7 +108,7 @@ export class MqttSession {
       client.subscribe(subscriptions, {qos: 0, rap: false}, (error, grants) => {
         if (!current()) return;
         if (error || !grants || subscriptions.some(topic => !grants.some(grant => grant.topic === topic && Number(grant.qos) < 128))) {
-          this.fail('Accesso ai dati negato. Verifica i permessi assegnati a questo utente.');
+          this.fail('Data access denied. Check this user\'s permissions.');
           return;
         }
         clearTimeout(this.deadline);
@@ -127,18 +127,18 @@ export class MqttSession {
     });
     client.on('disconnect', packet => {
       if (!current()) return;
-      if ([0x86, 0x87, 0x8a].includes(packet.reasonCode ?? 0)) this.fail('Accesso rifiutato dal broker. Controlla credenziali e permessi.');
+      if ([0x86, 0x87, 0x8a].includes(packet.reasonCode ?? 0)) this.fail('Access rejected by the broker. Check credentials and permissions.');
     });
     client.on('error', error => {
       if (!current()) return;
       const code = Number((error as Error & {code?: number}).code);
       if (!this.role$.value || [4, 5, 0x86, 0x87, 0x8a].includes(code)) {
-        this.fail('Accesso non riuscito. Controlla credenziali, connessione e permessi.');
+        this.fail('Sign-in failed. Check credentials, connection and permissions.');
       } else this.connectionLost();
     });
     client.on('close', () => {
       if (!current()) return;
-      if (!this.role$.value) this.fail('Connessione interrotta prima di completare l’accesso.');
+      if (!this.role$.value) this.fail('Connection lost before sign-in completed.');
       else this.connectionLost();
     });
   }
@@ -148,7 +148,7 @@ export class MqttSession {
     const uncertain = this.pending !== undefined;
     this.rejectLogin = undefined; this.resolveLogin = undefined;
     this.logout();
-    this.feedback$.next(message + (uncertain ? ' Esito del comando in corso sconosciuto: verifica lo stato della barca.' : ''));
+    this.feedback$.next(message + (uncertain ? ' Pending command outcome unknown: check the boat status.' : ''));
     this.setState(State.ERROR);
     reject?.(new Error(message));
   }
@@ -171,7 +171,7 @@ export class MqttSession {
     this.dropClient();
     this.cancelPending();
     this.clearData();
-    if (commandWasPending) this.feedback$.next('Connessione persa durante il comando: esito sconosciuto. Verifica lo stato della barca prima di riprovare.');
+    if (commandWasPending) this.feedback$.next('Connection lost during the command: outcome unknown. Check the boat status before retrying.');
     this.setState(State.RECONNECTING);
     this.retry = setTimeout(() => this.open(), this.config.reconnectMs);
   }
@@ -221,23 +221,23 @@ export class MqttSession {
 
   send(command: ClientCommandUnion): void {
     if (!this.canCommand(command)) {
-      this.feedback$.next('Comando non inviato: controlla accesso, connessione e disponibilità di dati aggiornati.');
+      this.feedback$.next('Command not sent: check access, connection and fresh telemetry.');
       return;
     }
     if (command.type === ClientCommandType.StartRecording || command.type === ClientCommandType.StopRecording) {
       const start = command.type === ClientCommandType.StartRecording;
       const id = randomId();
-      const timer = setTimeout(() => this.recordingUnknown(id, 'Risposta non ricevuta: esito sconosciuto. Attendi un nuovo stato della barca.'), this.config.commandTimeoutMs);
+      const timer = setTimeout(() => this.recordingUnknown(id, 'No response received: outcome unknown. Wait for fresh boat status.'), this.config.commandTimeoutMs);
       this.pending = {id, topic: start ? TOPICS.startResponse : TOPICS.stopResponse, timer};
       this.pending$.next(true);
-      this.feedback$.next('Richiesta inviata. In attesa della conferma della barca…');
-      this.publish(start ? TOPICS.start : TOPICS.stop, {requestId: id}, 1, () => this.recordingUnknown(id, 'Invio non confermato: esito sconosciuto. Verifica lo stato della barca.'));
+      this.feedback$.next('Request sent. Waiting for the boat to acknowledge...');
+      this.publish(start ? TOPICS.start : TOPICS.stop, {requestId: id}, 1, () => this.recordingUnknown(id, 'Delivery not confirmed: outcome unknown. Check the boat status.'));
     } else {
       try {
         const {topic, payload} = commandPayload(command);
         // Increment/toggle commands are not idempotent: never queue or retransmit them.
-        this.feedback$.next('Comando inviato. Verifica l’aggiornamento nei dati della barca.');
-        this.publish(topic, payload, 0, () => this.feedback$.next('Invio non confermato. Verifica lo stato della barca prima di riprovare.'));
+        this.feedback$.next('Command sent. Check the updated boat telemetry.');
+        this.publish(topic, payload, 0, () => this.feedback$.next('Delivery not confirmed. Check the boat status before retrying.'));
       } catch (error) { this.feedback$.next((error as Error).message); }
     }
   }
@@ -260,7 +260,7 @@ export class MqttSession {
     this.recording$.next(null);
     this.seen.delete(TOPICS.recording);
     this.feedback$.next(data['success'] ? 'Request acknowledged by the boat. Check the recording status on the dashboard.'
-      : `La barca segnala: ${typeof data['error_message'] === 'string' ? data['error_message'] : 'operazione non riuscita'}. Verifica lo stato aggiornato.`);
+      : `Boat reported: ${typeof data['error_message'] === 'string' ? data['error_message'] : 'operation failed'}. Check the updated status.`);
   }
 
   private recordingUnknown(id: string, message: string): void {

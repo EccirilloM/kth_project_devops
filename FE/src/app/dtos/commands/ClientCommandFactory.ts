@@ -1,4 +1,3 @@
-// FE/src/app/dtos/commands/clientCommandFactory.ts
 import { ClientCommandType } from './ClientCommandType';
 import type {
   SetMarkCommand,
@@ -41,7 +40,6 @@ export const ClientCommandFactory = {
     };
   },
 
-  // --- FUNZIONE CORRETTA ---
   sendTestCommand(command: TestFlapCommand): SendTestCommand {  
     return {        
       type: ClientCommandType.TestCommand,

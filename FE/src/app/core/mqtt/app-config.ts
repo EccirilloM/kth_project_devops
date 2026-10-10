@@ -31,9 +31,9 @@ export function roleForUsername(username: string, config: AppConfig): AuthRoles 
 export function brokerUrl(value: string): string {
   let url: URL;
   try { url = new URL(value); }
-  catch { throw new Error('Indirizzo del broker non configurato. Contatta il responsabile del team.'); }
+  catch { throw new Error('Broker address is not configured. Contact the team administrator.'); }
   if (url.protocol !== 'wss:' || url.username || url.password || url.hash || url.search) {
-    throw new Error('Il broker deve usare un indirizzo wss:// senza credenziali o parametri.');
+    throw new Error('The broker must use a wss:// address without credentials, query parameters or a fragment.');
   }
   return url.toString();
 }

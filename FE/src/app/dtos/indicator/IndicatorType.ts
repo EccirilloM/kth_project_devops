@@ -1,4 +1,3 @@
-// FE/src/app/dtos/indicator/IndicatorType.ts
 export enum IndicatorType {
   KP = 'KP',
   KI = 'KI',

@@ -1,4 +1,3 @@
-// FE/src/app/dtos/commands/ClientCommand.ts
 import type { Mark } from '../mark/Mark';
 import { ClientCommandType } from './ClientCommandType';
 import { MethodType } from '../indicator/MethodType';
@@ -27,13 +26,11 @@ export type UpdateCommand = {
   payload: { indicator: IndicatorType; method: MethodType };
 };
 
-// --- TIPO RINOMINATO E AGGIORNATO ---
 export type SendTestCommand = {
   type: ClientCommandType.TestCommand;
   payload: { command: TestFlapCommand };
 };  
 
-// --- UNION AGGIORNATA ---
 export type ClientCommandUnion =
   | SetMarkCommand
   | StartRecordingCommand

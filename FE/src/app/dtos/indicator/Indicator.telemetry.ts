@@ -1,4 +1,3 @@
-// FE/src/app/dtos/indicator/Indicator.telemetry.ts
 import { IndicatorType } from './IndicatorType';
 
 export interface IndicatorTelemetry {

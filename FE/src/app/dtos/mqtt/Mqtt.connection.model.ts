@@ -1,4 +1,3 @@
-// FE/src/app/dtos/mqtt/Mqtt.connection.model.ts
 import type { TimeStamp } from '../common/TimeStamp';
 
 export enum MqttConnectionState {

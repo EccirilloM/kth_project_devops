@@ -1,4 +1,3 @@
-// FE/src/app/dtos/commands/ClientCommandType.ts
 export enum ClientCommandType {
   SetMark = 'SET_MARK',
   StartRecording = 'START_RECORDING',

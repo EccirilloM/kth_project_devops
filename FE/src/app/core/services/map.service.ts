@@ -11,6 +11,12 @@ import { MarkType } from '../../dtos/mark/MarkType';
 type RotatingMarker = L.Marker & {setRotationAngle(angle: number): L.Marker};
 type RotationOptions = L.MarkerOptions & {rotationAngle: number; rotationOrigin: string};
 
+const markLabels: Record<MarkType, string> = {
+  [MarkType.PIN]: 'Pin mark',
+  [MarkType.COMITATO]: 'Committee boat',
+  [MarkType.BOLINA]: 'Windward mark',
+};
+
 @Injectable({providedIn: 'root'})
 export class MapService {
   private map: L.Map | null = null;
@@ -107,7 +113,7 @@ export class MapService {
       const existing = this.buoyMarkers.get(mark.type);
       if (existing) existing.setLatLng(position);
       else this.buoyMarkers.set(mark.type, L.marker(position, {
-        icon: this.buoyIcon, alt: 'Buoy', title: mark.type,
+        icon: this.buoyIcon, alt: 'Buoy', title: markLabels[mark.type],
       }).addTo(this.map));
     }
   }
