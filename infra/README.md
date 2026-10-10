@@ -48,6 +48,24 @@ Example Spaces backend configuration (replace the bucket and endpoint):
 
 Here `region` is an S3 compatibility setting; the endpoint selects the actual Amsterdam storage location. Terraform 1.13.3 uses `use_lockfile=true` from `backend.tf`. The compatibility flags do not disable TLS certificate verification. See the [official Spaces backend documentation](https://docs.digitalocean.com/products/spaces/reference/terraform-backend/).
 
+### Enable state versioning once
+
+Spaces requires its S3 API to enable versioning. Create a temporary **Full Access** Spaces key for this administration step; the bucket-scoped pipeline key cannot change bucket configuration. Full Access covers all Spaces buckets in the account: do not save this temporary key in GitHub. See [Spaces access permissions](https://docs.digitalocean.com/products/spaces/how-to/manage-access/) and [versioning](https://docs.digitalocean.com/products/spaces/how-to/enable-versioning/).
+
+From the repository root, replace `YOUR_BUCKET` with the dedicated bucket name and `ams3` if necessary. Windows CMD:
+
+```cmd
+docker run --rm -it --mount "type=bind,source=%cd%,target=/workspace,readonly" --entrypoint /bin/bash public.ecr.aws/aws-cli/aws-cli:latest /workspace/ci/deploy/enable-state-versioning.sh YOUR_BUCKET ams3
+```
+
+macOS/Linux:
+
+```sh
+docker run --rm -it --mount "type=bind,source=$PWD,target=/workspace,readonly" --entrypoint /bin/bash public.ecr.aws/aws-cli/aws-cli:latest /workspace/ci/deploy/enable-state-versioning.sh YOUR_BUCKET ams3
+```
+
+Enter the temporary access key ID and secret at the hidden prompts. Credentials stay in the disposable container; they are not written to the repository or passed as command arguments. The script prints the AWS CLI version and confirms `Object versioning: Enabled`. This one-time administration command uses the official AWS CLI image; it is separate from the versioned CI tooling. Revoke the temporary key after verification, keeping the limited Terraform key. Versioning preserves older state versions but does not replace verifying state recovery and locking during deployment setup.
+
 ## First deployment to a new account
 
 1. Verify the account, bucket privacy and recovery setup. Do not use bootstrap to replace lost state from an existing deployment.
