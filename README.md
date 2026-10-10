@@ -8,6 +8,12 @@ The browser connects directly to an MQTT broker over secure WebSockets (WSS), di
 
 This README explains setup and verification. Architecture, design choices and limitations belong in the separate [project report](https://github.com/EccirilloM/DevOps_Project_Report). Application code is in `FE/`, the simulator in `simulator/`, infrastructure in `infra/`, and container tooling and automation in `Docker/` and `ci/`.
 
+## Live application
+
+Open the [GitHub Pages frontend](https://eccirillom.github.io/kth_project_devops/). It connects to the demo broker at `wss://kth-devops-sailing-hryqr.ondigitalocean.app/mqtt`; the broker and simulator run on DigitalOcean. The [App Platform frontend](https://kth-devops-sailing-hryqr.ondigitalocean.app/) provides another entry point to the same demo. Use `guest` for telemetry or `operator` for recording controls, with credentials obtained privately from the authors. Passwords are never included in the website configuration.
+
+[CI run #65, attempt 2](https://github.com/EccirilloM/kth_project_devops/actions/runs/38052448425/attempts/2) passed all five CI jobs and deployed Pages. A manual check on 10 October 2026 confirmed guest sign-in and changing telemetry on Pages; operator start/stop recording was checked through the App Platform frontend. These are deployment observations, not continuous availability guarantees.
+
 ## Requirements
 
 Git, Docker with Linux containers and Compose v2, and internet access. Windows laboratory commands also require Git for Windows. No host Node.js, Python or Terraform installation is needed. Run all commands from the **repository root**.
@@ -115,7 +121,14 @@ Diagnostics are in `FE/test-results/lab-diagnostics/` and `FE/test-results/integ
 | Gitleaks | Detected secrets block; reachable Git history and the non-ignored working tree are scanned. |
 | Dependency audit | High/critical findings, including development dependencies, and scan errors block. Low/moderate findings are reported; no audit exceptions are configured. |
 
-CD packages the checked frontend on `main`. Optional deployment paths publish it to GitHub Pages from `main`, or publish the three tested images to DigitalOcean Container Registry (DOCR) and update App Platform from `dev`. Compiled frontend hashes verify build reuse; only public runtime configuration changes. DigitalOcean releases use unique commit/run/attempt tags, checked against the tested image digests before and after deployment. The workflow never reuses a release tag; registry write access can still change tags.
+CD packages the checked frontend on `main`. The configured deployment paths are:
+
+| Branch | Deployment after successful CI |
+| --- | --- |
+| `main` | Publish the validated frontend to GitHub Pages. |
+| `dev` | Publish the three tested images to DOCR and update DigitalOcean App Platform. |
+
+The other branch's deployment job is **skipped by design**. Compiled frontend hashes verify build reuse; only public runtime configuration changes. DigitalOcean releases use unique commit/run/attempt tags, checked against the tested image digests before and after deployment. The workflow never reuses a release tag; registry write access can still change tags.
 
 For **Pages**, select **Settings → Pages → Source: GitHub Actions** and configure repository variables `PAGES_DEPLOY_ENABLED=true` and `PAGES_PUBLIC_CONFIG_JSON` using the JSON format above, with the actual broker endpoint and usernames. Pages hosts only the frontend; the broker runs separately. For **DigitalOcean**, follow the [account setup, private state and deployment instructions](infra/README.md) before enabling `KTH_DO_DEPLOY_ENABLED`. With deployment flags unset, CI and frontend delivery on `main` still run.
 
