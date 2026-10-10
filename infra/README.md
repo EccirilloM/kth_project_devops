@@ -1,14 +1,12 @@
 # DigitalOcean deployment
 
-The disposable test environment is managed by `infra/lab`. This directory manages a separate persistent App Platform demo: frontend, Mosquitto and simulator, with verified images stored in DigitalOcean Container Registry (DOCR). GitHub Pages remains the frontend deployment from `main`.
-
-Routine cloud delivery follows `preflight → initialize state → publish tested images → plan/apply → verify release`. Bootstrap and app recovery are exceptional, explicit operations; leave both manual inputs at their defaults for normal deployments. The CI laboratory's second-apply check does not establish cloud idempotence.
+This guide explains how to deploy your own copy of the demo. Terraform manages the frontend, Mosquitto broker and simulator on DigitalOcean App Platform, using images from DigitalOcean Container Registry (DOCR). GitHub Pages provides a second frontend. To run the project locally instead, follow the [main README](../README.md).
 
 ## Account and state setup
 
-Use an account/team you control and a dedicated registry name beginning with `kth-devops-`. The workflow uses only the `KTH_` settings below; it does not fall back to another contributor's account, domain or credentials. The app uses DigitalOcean's generated HTTPS domain and TLS termination for `/mqtt`, so a custom domain is unnecessary.
+Use a DigitalOcean account you control and choose a unique registry name starting with `kth-devops-`. App Platform supplies the HTTPS domain and TLS termination, so you do not need a custom domain. The deployment creates three paid app components and uses a registry and Spaces storage.
 
-Create a private Spaces Standard bucket separately, disable CDN and keep file listing restricted. Use a bucket-scoped Read/Write/Delete key for Terraform: deletion permission is needed to release its lockfile. Keep this bucket after application teardown until you have finished managing the resources. Enable object versioning through the Spaces S3 API and retain a private recovery copy before relying on the backend for ongoing deployment. Never upload state or plans as public CI artifacts.
+First, create a private Spaces Standard bucket for Terraform state, with CDN disabled and file listing restricted. Give Terraform a bucket-scoped Read/Write/Delete key; delete permission lets it release state locks. Keep the bucket while managing the deployment, and keep state and plan files out of Git and public artifacts.
 
 GitHub repository **secrets**:
 
@@ -21,7 +19,7 @@ GitHub repository **secrets**:
 | `KTH_OPERATOR_PASSWORD` | Broker user allowed to send commands. |
 | `KTH_SIMULATOR_PASSWORD` | Shared by the broker configuration and simulator. |
 
-Use three different random broker passwords, each 24–128 characters from letters, digits, `_` and `-`. Guest/Guest aliases share the guest password; operator/Staff/staff share the operator password. Password hashes are generated at container startup, never baked into the image.
+Use three different random broker passwords, each 24–128 characters long using letters, digits, `_` and `-`. The broker generates password hashes at startup rather than storing credentials in its image.
 
 GitHub repository **variables**:
 
@@ -48,11 +46,11 @@ Example Spaces backend configuration (replace the bucket and endpoint):
 }
 ```
 
-Here `region` is an S3 compatibility setting; the endpoint selects the actual Amsterdam storage location. Terraform 1.13.3 uses `use_lockfile=true` from `backend.tf`. The compatibility flags do not disable TLS certificate verification. See the [official Spaces backend documentation](https://docs.digitalocean.com/products/spaces/reference/terraform-backend/).
+The endpoint selects the storage location; `us-east-1` is an S3 compatibility setting. State locking is enabled in `backend.tf`, and TLS verification remains enabled. See the [Spaces backend documentation](https://docs.digitalocean.com/products/spaces/reference/terraform-backend/) for details.
 
 ### Enable state versioning once
 
-Spaces requires its S3 API to enable versioning. Create a temporary **Full Access** Spaces key for this administration step; the bucket-scoped pipeline key cannot change bucket configuration. Full Access covers all Spaces buckets in the account: do not save this temporary key in GitHub. See [Spaces access permissions](https://docs.digitalocean.com/products/spaces/how-to/manage-access/) and [versioning](https://docs.digitalocean.com/products/spaces/how-to/enable-versioning/).
+Enable versioning so previous state versions can be recovered. This one-time step needs a temporary **Full Access** Spaces key, which covers all buckets in the account. Keep it separate from the limited Terraform key and do not save it in GitHub.
 
 From the repository root, replace `YOUR_BUCKET` with the dedicated bucket name and `ams3` if necessary. Windows CMD:
 
@@ -66,42 +64,39 @@ macOS/Linux:
 docker run --rm -it --mount "type=bind,source=$PWD,target=/workspace,readonly" --entrypoint /bin/bash public.ecr.aws/aws-cli/aws-cli:latest /workspace/ci/deploy/enable-state-versioning.sh YOUR_BUCKET ams3
 ```
 
-Enter the temporary access key ID and secret at the hidden prompts. Credentials stay in the disposable container; they are not written to the repository or passed as command arguments. The script prints the AWS CLI version and confirms `Object versioning: Enabled`. This one-time administration command uses the official AWS CLI image; it is separate from the versioned CI tooling. Revoke the temporary key after verification, keeping the limited Terraform key. Versioning preserves older state versions but does not replace verifying state recovery and locking during deployment setup.
+Enter the temporary key ID and secret at the hidden prompts. When the script confirms `Object versioning: Enabled`, revoke that temporary key. Keep the bucket-scoped Terraform key for deployments. See the [Spaces versioning guide](https://docs.digitalocean.com/products/spaces/how-to/enable-versioning/) for background.
 
 ## First deployment to a new account
 
-1. Verify the account, bucket privacy and recovery setup. Do not use bootstrap to replace lost state from an existing deployment.
-2. Configure the secrets and variables above. Review costs before enabling CD: three `apps-s-1vcpu-0.5gb` components, a Starter registry and Spaces storage. Check current quotas and prices in the provider console.
-3. Publish the reviewed workflows to `main` (to expose manual dispatch) and `dev`. In **Actions → CI → Run workflow**, choose **dev** and enable **bootstrap-cloud**. All CI checks run before cloud provisioning; no older artifact is substituted.
-4. If the app address is absent, the workflow permits only empty state or registry-only state. It refuses an existing app with the requested name or an untracked registry. Terraform creates the registry using only `registry.tf` and `backend.tf` in a temporary working directory, sharing the same backend key and resource address as the full configuration.
-5. CD uploads the three images verified by this CI run with unique `component-commit-run-attempt` tags. It checks the remote DOCR catalog against their digests before Terraform updates the app. Automatic deployment on image push is disabled. A partial first run can resume with the explicit bootstrap option; if an app exists without its state, recover the state first.
-6. Inspect the release summary, then test guest/operator login, visible telemetry and recording controls at the reported UI URL. Deployment success checks the active release's source tags, rechecks their registry digests and verifies the exact public broker configuration; it does not replace this remote MQTT verification.
+1. Configure the secrets and variables above, verify the private versioned bucket, and set `KTH_DO_DEPLOY_ENABLED=true`.
+2. Make the workflows available on both `main` and `dev`. In **Actions → CI → Run workflow**, select **dev**, enable **bootstrap-cloud**, and leave **recover-app-id** empty. Bootstrap is for a new deployment, not for replacing lost state.
+3. Wait for CI and deployment to finish. Terraform creates the registry and app, and CD publishes the three images tested by that run. If creation stops partway through, check the resources and state before retrying; use the recovery instructions below if the app exists but is missing from state.
+4. Open the URL in the release summary and verify guest telemetry and operator recording controls. Automated release checks verify image references and public configuration, but do not replace this live MQTT check.
 
-The workflow sets `image_release` to select unique tags explicitly in App Platform, whose API rejected digest-only sources during deployment setup even though the matching images existed in DOCR. This is a compatibility workaround requiring a successful cloud deployment to verify. An empty `image_release` retains digest sources for older configurations and imports. Tags are not intrinsically immutable: the workflow never overwrites them, but another registry writer could. The before/after digest checks detect persistent retargeting, not every possible change during deployment. See [container image deployment](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-container-images/) and [explicit DOCR registry selection](https://docs.digitalocean.com/support/how-do-i-fix-an-image-or-digest-not-found-error-with-multiple-registries/).
+After setup, pushes to `dev` update the app once CI passes; leave bootstrap and recovery inputs at their defaults. Each release uses unique image tags, with digests checked before and after deployment. Automatic deployment on image push is disabled. The workflow never reuses tags, although another registry writer could change them.
 
-Subsequent pushes to `dev` update the app after CI passes. They require the registry and app in state, reject deletion/replacement, and do not recreate missing cloud resources. Deployments are serialized and Terraform uses backend locks. Do not manually cancel an apply. State and plan files remain private on the runner; only image references are uploaded.
-
-The bootstrap root is derived from the same `registry.tf`, not a second copy of the registry definition. `ci/verify-infra.sh` validates both roots and the Docker laboratory. CI also tests the plan gate with synthetic update, creation, deletion and replacement plans. Keep reviewed provider lockfiles in Git after initialization.
+Routine deployments require the existing app and registry in Terraform state and reject deletion or replacement. They run one at a time with state locking. Avoid cancelling a Terraform apply midway through.
 
 ## Existing deployments and recovery
 
-If an app creation request fails after DigitalOcean has persisted the app, the
-registry may be tracked while the app is absent from state. Inspect the app in
-the intended account and record its exact UUID. With the private, versioned
-backend configured, use a manual **CI** run on **dev**, leave **bootstrap-cloud**
-off, and supply that UUID in **recover-app-id**. Do not use a name-only match or
-delete the app to bypass the guard.
+An interrupted first deployment can leave an app on DigitalOcean without its entry in Terraform state. Check the app in the correct account and copy its exact UUID. If the registry is already tracked, run **CI** manually on **dev**, leave **bootstrap-cloud** off and enter the UUID in **recover-app-id**.
 
-Recovery checks the registry in state, the app ID, name, region, component set
-and image sources. It saves a private runner-local state copy and imports the
-app under the backend lock; bucket versioning retains the previous remote state
-version. A retry accepts only the same already-tracked ID. CI then publishes its
-verified images and applies an update through the existing plan gate; creation,
-deletion and replacement remain blocked. The import does not itself fix a failed
-deployment. Inspect the resulting release and verify MQTT operation afterward.
+Recovery checks the app's identity and configuration, backs up the current state privately, and imports the app under a state lock before continuing deployment. Verify the resulting application afterward. Do not delete the app or use an empty state to bypass recovery errors.
 
-Never point a fresh token at another account's state or run bootstrap to bypass a missing-state error. Freeze all writers, recover the latest state privately, and verify its resource IDs and lineage against the intended account. Back it up before migrating with `terraform init -migrate-state` using the containerized CLI in `Docker/terraform.compose.yaml`. Check `terraform state list` and a reviewed plan before resuming. The current automated cloud job intentionally uses the new account's `KTH_` settings only; adopting an older deployment requires deliberate configuration and state review.
+For other state problems or migrations, stop deployments, back up the latest state and verify that its resource IDs belong to the intended account. Recover that state before applying again; bootstrap is not a general recovery mechanism.
 
 ## GitHub Pages
 
-After verifying the public broker, configure `PAGES_PUBLIC_CONFIG_JSON` with its WSS endpoint and the application's public usernames. Enable `PAGES_DEPLOY_ENABLED` and release through `main`. Pages reuses the validated frontend build and supplies public configuration separately at runtime. Broker passwords never belong in this configuration.
+Select **Settings → Pages → Source: GitHub Actions**. Set `PAGES_PUBLIC_CONFIG_JSON` to the broker's WSS endpoint and public usernames, using the format in the main README, then set `PAGES_DEPLOY_ENABLED=true`. A successful push workflow on `main` publishes the tested frontend with these runtime settings. Do not include passwords in the JSON. With deployment flags unset, CI and frontend delivery packaging still run.
+
+## Repository rules
+
+The proposal calls for PR review and required CI checks. To enforce this, activate a ruleset on `dev` and `main` requiring a pull request, one peer approval and all five CI checks. A disabled ruleset does not enforce these requirements.
+
+## Local test environment
+
+The integration script described in the main README creates a temporary Docker environment. Its second-apply check covers those resources, not DigitalOcean. Only documented null-to-empty normalization in selected Docker-provider fields is tolerated; planned changes and other drift fail.
+
+Logs are saved in `FE/test-results/lab-diagnostics/` and `FE/test-results/integration/`. State, plans and certificates stay in the ignored `.runtime/<environment-id>/` directory and should remain private. If cleanup fails, keep that directory, set `KTH_ENVIRONMENT_ID` to its environment ID and run `bash ci/lab/run.sh down` from Git Bash, Linux or macOS.
+
+In GitHub Actions, diagnostics are retained for 7 days, runtime image archives for 3 days, and the frontend delivery candidate for 14 days. Download any evidence you need to keep beyond these periods.
