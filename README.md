@@ -14,6 +14,14 @@ You can try the application on [GitHub Pages](https://eccirillom.github.io/kth_p
 
 This is a temporary demonstration for course assessment, using synthetic data rather than a connection to the physical boat. The guest account can only read telemetry; it cannot publish messages or send commands. We plan to retire the demo after assessment.
 
+The dashboard shows the simulator's telemetry and provides recording controls for operators:
+
+![Dashboard showing simulated boat attitude and operator recording controls](assets/screenshots/dashboard.png)
+
+The map follows the simulated position and traces its path during the browser session:
+
+![Map showing the simulator's position and track on OpenStreetMap tiles](assets/screenshots/map.png)
+
 ## Run locally
 
 To run or test the project on your own computer, clone this repository and install Git and Docker with Linux containers and Compose v2. You will also need internet access. The tools run in containers, so there is no need to install Node.js, Python or Terraform separately. On Windows, Git for Windows provides Bash for the MQTT integration test script below. Run all commands from the **repository root**.
@@ -132,4 +140,4 @@ The simulator represents a subset of the boat's behaviour. Its tests help us che
 
 ## AI assistance
 
-AI tools supported code review, troubleshooting and conceptual discussions, as well as frontend simplification and workflow/test implementation. The authors are responsible for reviewing changes and validating them through the project checks.
+We used AI for code review, occasional troubleshooting and brainstorming technical choices. It also helped simplify the frontend and make changes to workflows and tests. For the report, we used it to set up the LaTeX project, troubleshoot compilation issues and revise the wording.
