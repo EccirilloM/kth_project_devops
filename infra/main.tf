@@ -134,10 +134,13 @@ resource "digitalocean_app" "mqtt" {
       http_port          = 80
 
       image {
+        # DOCR uses the account's single registry; the registry field must be omitted.
         registry_type = "DOCR"
-        registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
         digest        = var.frontend_digest
+        deploy_on_push {
+          enabled = false
+        }
       }
 
       env {
@@ -179,9 +182,11 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
         digest        = var.mosquitto_digest
+        deploy_on_push {
+          enabled = false
+        }
       }
     }
 
@@ -192,9 +197,11 @@ resource "digitalocean_app" "mqtt" {
 
       image {
         registry_type = "DOCR"
-        registry      = digitalocean_container_registry.mqtt.name
         repository    = var.image_repository
         digest        = var.simulator_digest
+        deploy_on_push {
+          enabled = false
+        }
       }
 
       env {
