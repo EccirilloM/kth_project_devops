@@ -11,6 +11,10 @@ on:
         description: Explicit first deployment to a new account and state
         type: boolean
         default: false
+      recover-app-id:
+        description: Exact app UUID reviewed for explicit state recovery
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -109,6 +113,7 @@ jobs:
     env:
       TF_IN_AUTOMATION: 'true'
       KTH_BOOTSTRAP_CLOUD: ${{ inputs.bootstrap-cloud }}
+      KTH_RECOVER_APP_ID: ${{ inputs.recover-app-id }}
       TF_STATE_CONFIG_JSON: ${{ vars.KTH_TF_STATE_CONFIG_JSON }}
       AWS_ACCESS_KEY_ID: ${{ secrets.KTH_TF_STATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.KTH_TF_STATE_SECRET_ACCESS_KEY }}

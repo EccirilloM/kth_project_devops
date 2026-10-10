@@ -13,6 +13,11 @@ registry_address=digitalocean_container_registry.mqtt
 app_address=digitalocean_app.mqtt
 printf 'KTH_ALLOW_CLOUD_CREATE=false\n' >> "$GITHUB_ENV"
 
+if [[ -n "${KTH_RECOVER_APP_ID:-}" ]]; then
+  bash "$(dirname "$0")/recover-app.sh"
+  terraform state list > "$RUNNER_TEMP/state-addresses.txt"
+fi
+
 if ! grep -qx "$app_address" "$RUNNER_TEMP/state-addresses.txt"; then
   if [[ "${KTH_BOOTSTRAP_CLOUD:-false}" != true || "${GITHUB_EVENT_NAME:-}" != workflow_dispatch || "${GITHUB_REF:-}" != refs/heads/dev ]]; then
     echo '::error::App state is missing. Restore existing state, or explicitly bootstrap a NEW environment through the CI manual run on dev.'

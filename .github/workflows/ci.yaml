@@ -11,6 +11,10 @@ on:
         description: 'First deployment to the new account: create the registry and app (dev only)'
         type: boolean
         default: false
+      recover-app-id:
+        description: 'Recover an existing app into registry-only state: exact reviewed UUID (dev only; leave bootstrap off)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -176,6 +180,8 @@ jobs:
         run: bash ci/deploy/test-plan-policy.sh
       - name: Verify registry bootstrap guard without cloud access
         run: bash ci/deploy/test-registry-bootstrap.sh
+      - name: Verify app recovery guards without cloud access
+        run: bash ci/deploy/test-app-recovery.sh
       - uses: actions/download-artifact@v4
         with:
           name: frontend-checked-${{ github.sha }}
@@ -302,4 +308,5 @@ jobs:
     with:
       integration-passed: ${{ needs.integration.result == 'success' }}
       bootstrap-cloud: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap-cloud == true }}
+      recover-app-id: ${{ github.event_name == 'workflow_dispatch' && inputs.recover-app-id || '' }}
     secrets: inherit

@@ -81,6 +81,21 @@ The bootstrap root is derived from the same `registry.tf`, not a second copy of 
 
 ## Existing deployments and recovery
 
+If an app creation request fails after DigitalOcean has persisted the app, the
+registry may be tracked while the app is absent from state. Inspect the app in
+the intended account and record its exact UUID. With the private, versioned
+backend configured, use a manual **CI** run on **dev**, leave **bootstrap-cloud**
+off, and supply that UUID in **recover-app-id**. Do not use a name-only match or
+delete the app to bypass the guard.
+
+Recovery checks the registry in state, the app ID, name, region, component set
+and image sources. It saves a private runner-local state copy and imports the
+app under the backend lock; bucket versioning retains the previous remote state
+version. A retry accepts only the same already-tracked ID. CI then publishes its
+verified images and applies an update through the existing plan gate; creation,
+deletion and replacement remain blocked. The import does not itself fix a failed
+deployment. Inspect the resulting release and verify MQTT operation afterward.
+
 Never point a fresh token at another account's state or run bootstrap to bypass a missing-state error. Freeze all writers, recover the latest state privately, and verify its resource IDs and lineage against the intended account. Back it up before migrating with `terraform init -migrate-state` using the containerized CLI in `Docker/terraform.compose.yaml`. Check `terraform state list` and a reviewed plan before resuming. The current automated cloud job intentionally uses the new account's `KTH_` settings only; adopting an older deployment requires deliberate configuration and state review.
 
 ## GitHub Pages
