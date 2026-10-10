@@ -259,7 +259,7 @@ export class MqttSession {
     // Do not guess the state from an ACK (or from an error). Wait for live boat telemetry.
     this.recording$.next(null);
     this.seen.delete(TOPICS.recording);
-    this.feedback$.next(data['success'] ? 'Richiesta confermata dalla barca. In attesa dello stato aggiornato.'
+    this.feedback$.next(data['success'] ? 'Request acknowledged by the boat. Check the recording status on the dashboard.'
       : `La barca segnala: ${typeof data['error_message'] === 'string' ? data['error_message'] : 'operazione non riuscita'}. Verifica lo stato aggiornato.`);
   }
 
